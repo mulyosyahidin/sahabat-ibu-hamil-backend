@@ -41,7 +41,7 @@ describe('App', () => {
 
       expect(response.body).toEqual({
         success: true,
-        message: 'Welcome to Sahabat Ibu Hamil API',
+        message: 'Selamat datang di API Sahabat Ibu Hamil',
         data: {
           version: '1.0.0',
           environment: expect.any(String)
@@ -56,7 +56,7 @@ describe('App', () => {
 
       expect(response.body).toEqual({
         success: true,
-        message: 'Server is healthy',
+        message: 'Server dalam kondisi sehat',
         data: expect.objectContaining({
           status: 'OK',
           timestamp: expect.any(String),
@@ -82,7 +82,7 @@ describe('App', () => {
         .expect(200);
 
       expect(response.body.success).toBe(true);
-      expect(response.body.message).toBe('Welcome to Sahabat Ibu Hamil API');
+      expect(response.body.message).toBe('Selamat datang di API Sahabat Ibu Hamil');
     });
   });
 });

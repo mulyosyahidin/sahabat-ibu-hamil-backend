@@ -28,7 +28,7 @@ export class WelcomeController {
       environment: process.env.NODE_ENV || 'development'
     };
     
-    const response = ApiResponse.success('Welcome to Sahabat Ibu Hamil API', welcomeData);
+    const response = ApiResponse.success('Selamat datang di API Sahabat Ibu Hamil', welcomeData);
     res.json(response);
   }
 
@@ -50,7 +50,7 @@ export class WelcomeController {
       version: process.version
     };
     
-    const response = ApiResponse.success('Server is healthy', healthData);
+    const response = ApiResponse.success('Server dalam kondisi sehat', healthData);
     res.json(response);
   }
 }

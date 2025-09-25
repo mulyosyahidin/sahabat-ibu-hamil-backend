@@ -1,5 +1,8 @@
 node_modules
 dist
 .env
+.env.test
 coverage
 .vscode
+
+/src/generated/prisma

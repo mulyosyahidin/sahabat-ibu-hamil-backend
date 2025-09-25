@@ -8,11 +8,15 @@
 
 import { Router } from 'express';
 import welcomeRoutes from './welcome.route';
+import authRoutes from './auth.route';
 
 // Create main router instance
 const router = Router();
 
 // Mount welcome routes at root path
 router.use('/', welcomeRoutes);
+
+// Mount auth routes at /auth path
+router.use('/auth', authRoutes);
 
 export default router;

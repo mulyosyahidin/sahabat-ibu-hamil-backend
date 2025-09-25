@@ -30,7 +30,11 @@ export default [
     },
     rules: {
       ...tseslint.configs.recommended.rules,
-      '@typescript-eslint/no-unused-vars': 'error',
+      '@typescript-eslint/no-unused-vars': ['error', { 
+        'argsIgnorePattern': '^_',
+        'varsIgnorePattern': '^_',
+        'destructuredArrayIgnorePattern': '^_'
+      }],
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/explicit-function-return-type': 'warn',
       'no-console': 'warn',
@@ -39,6 +43,6 @@ export default [
     }
   },
   {
-    ignores: ['dist/**/*', 'node_modules/**/*', '*.js', 'tests/**/*']
+    ignores: ['dist/**/*', 'node_modules/**/*', '*.js', 'tests/**/*', 'src/generated/**/*', 'prisma/**/*']
   }
 ];
