@@ -9,6 +9,7 @@
 import { Router } from 'express';
 import welcomeRoutes from './welcome.route';
 import authRoutes from './auth.route';
+import deviceRoutes from './device.route';
 
 // Create main router instance
 const router = Router();
@@ -18,5 +19,8 @@ router.use('/', welcomeRoutes);
 
 // Mount auth routes at /auth path
 router.use('/auth', authRoutes);
+
+// Mount device routes at /devices path
+router.use('/devices', deviceRoutes);
 
 export default router;

@@ -10,6 +10,7 @@
 
 import { Router } from 'express';
 import { AuthController } from '../controllers/auth.controller';
+import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
 const authController = new AuthController();
@@ -24,12 +25,12 @@ router.post('/login', authController.login);
  * GET /auth/me
  * Get current user profile (requires authentication)
  */
-router.get('/me', authController.me);
+router.get('/me', authMiddleware, authController.me.bind(authController));
 
 /**
  * POST /auth/logout
  * Logout user (requires authentication)
  */
-router.delete('/logout', authController.logout);
+router.delete('/logout', authMiddleware, authController.logout.bind(authController));
 
 export default router;

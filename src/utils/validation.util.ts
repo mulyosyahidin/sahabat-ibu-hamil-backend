@@ -23,11 +23,11 @@ export interface ValidationSuccess<T> {
 /**
  * Validation result type for failed validation
  */
-export interface ValidationError {
+export interface ValidationError<TDetails = unknown> {
   success: false;
   error: {
     message: string;
-    details: any;
+    details: TDetails;
   };
 }
 

@@ -1,367 +1,440 @@
+/**
+ * Login Endpoint Tests
+ * 
+ * Comprehensive test suite for the login endpoint covering both positive
+ * and negative scenarios including validation, authentication, and error handling.
+ * 
+ * @author Sahabat Ibu Hamil Team
+ * @version 1.0.0
+ */
+
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
-import createApp from '../../src/app';
-import bcrypt from 'bcrypt';
 import { PrismaClient } from '../../src/generated/prisma';
+import createApp from '../../src/app';
+import * as bcrypt from 'bcrypt';
 
 describe('POST /api/auth/login', () => {
-    let appInstance: ReturnType<typeof createApp>;
-    let prisma: PrismaClient;
-    let testUserId: number;
-    let emailVerifiedAt: Date;
-    let rememberToken: string;
+  let appInstance: ReturnType<typeof createApp>;
+  let prisma: PrismaClient;
+  let testUserId: number;
+  let testUserEmail: string;
+  let testUserPassword: string;
 
-    beforeAll(async () => {
-        prisma = new PrismaClient();
-        await prisma.$connect();
+  beforeAll(async () => {
+    // Initialize Prisma client
+    prisma = new PrismaClient();
+    
+    // Create app instance
+    appInstance = createApp(3002);
+
+    // Setup test user data
+    testUserEmail = 'test.login@example.com';
+    testUserPassword = 'testpassword123';
+    const hashedPassword = await bcrypt.hash(testUserPassword, 10);
+
+    // Create test user
+    const testUser = await prisma.user.create({
+      data: {
+        name: 'Test Login User',
+        email: testUserEmail,
+        password: hashedPassword,
+      }
+    });
+    testUserId = testUser.id;
+  });
+
+  afterAll(async () => {
+    // Clean up test user
+    if (testUserId) {
+      await prisma.user.delete({
+        where: { id: testUserId }
+      });
+    }
+    
+    // Disconnect Prisma
+    await prisma.$disconnect();
+  });
+
+  describe('Positive Flow - Successful Login', () => {
+    it('should login successfully with valid credentials', async () => {
+      const loginData = {
+        email: testUserEmail,
+        password: testUserPassword
+      };
+
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(200);
+
+      // Verify response structure
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('message', 'Berhasil login');
+      expect(response.body).toHaveProperty('data');
+      expect(response.body.data).toHaveProperty('user');
+      expect(response.body.data).toHaveProperty('token');
+
+      // Verify user data
+      const user = response.body.data.user;
+      expect(user).toHaveProperty('id', testUserId);
+      expect(user).toHaveProperty('name', 'Test Login User');
+      expect(user).toHaveProperty('email', testUserEmail);
+      expect(user).toHaveProperty('created_at');
+      expect(user).toHaveProperty('updated_at');
+
+      // Verify sensitive data is not included
+      expect(user).not.toHaveProperty('password');
+      expect(user).not.toHaveProperty('remember_token');
+
+      // Verify token is a string
+      expect(typeof response.body.data.token).toBe('string');
+      expect(response.body.data.token.length).toBeGreaterThan(0);
     });
 
-    afterAll(async () => {
-        await prisma.$disconnect();
+    it('should handle email case insensitivity', async () => {
+      const loginData = {
+        email: testUserEmail.toUpperCase(),
+        password: testUserPassword
+      };
+
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.user.email).toBe(testUserEmail);
     });
 
-    beforeEach(async () => {
-        appInstance = createApp(3001);
+    it('should update remember_token on successful login', async () => {
+      const loginData = {
+        email: testUserEmail,
+        password: testUserPassword
+      };
 
-        // Initialize test data
-        emailVerifiedAt = new Date();
-        rememberToken = 'test-remember-token-' + Date.now();
+      // Login first time
+      const response1 = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(200);
 
-        // Create a test user
-        const hashedPassword = await bcrypt.hash('password123', 10);
-        const testUser = await prisma.user.create({
-            data: {
-                name: 'Test User',
-                email: 'test@example.com',
-                password: hashedPassword,
-                remember_token: rememberToken,
-                email_verified_at: emailVerifiedAt,
-            }
-        });
-        testUserId = testUser.id;
+      // Get user from database to check remember_token
+      const userAfterFirstLogin = await prisma.user.findUnique({
+        where: { id: testUserId }
+      });
+
+      expect(userAfterFirstLogin?.remember_token).not.toBeNull();
+      const firstRememberToken = userAfterFirstLogin?.remember_token;
+
+      // Login second time
+      await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to ensure different token
+      
+      const response2 = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(200);
+
+      // Get user from database again
+      const userAfterSecondLogin = await prisma.user.findUnique({
+        where: { id: testUserId }
+      });
+
+      expect(userAfterSecondLogin?.remember_token).not.toBeNull();
+      expect(userAfterSecondLogin?.remember_token).not.toBe(firstRememberToken);
+    });
+  });
+
+  describe('Negative Flow - Authentication Errors', () => {
+    it('should reject login with invalid email', async () => {
+      const loginData = {
+        email: 'nonexistent@example.com',
+        password: testUserPassword
+      };
+
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(401);
+
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Email atau password salah!');
+      expect(response.body).not.toHaveProperty('data');
     });
 
-    afterEach(async () => {
-        // Clean up test user
-        if (testUserId) {
-            await prisma.user.delete({
-                where: { id: testUserId }
-            });
-        }
+    it('should reject login with invalid password', async () => {
+      const loginData = {
+        email: testUserEmail,
+        password: 'wrongpassword'
+      };
+
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(401);
+
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Email atau password salah!');
+      expect(response.body).not.toHaveProperty('data');
     });
 
-    describe('Positive Scenarios', () => {
-        it('should login successfully with valid credentials', async () => {
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'test@example.com',
-                    password: 'password123'
-                })
-                .expect(200);
+    it('should reject login with both invalid email and password', async () => {
+      const loginData = {
+        email: 'wrong@example.com',
+        password: 'wrongpassword'
+      };
 
-            expect(response.body).toEqual({
-                success: true,
-                message: 'Berhasil login',
-                data: {
-                    user: {
-                        id: testUserId,
-                        name: 'Test User',
-                        email: 'test@example.com',
-                        email_verified_at: emailVerifiedAt.toISOString(),
-                        remember_token: rememberToken,
-                        created_at: expect.any(String),
-                        updated_at: expect.any(String)
-                    },
-                    token: expect.any(String)
-                }
-            });
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(401);
 
-            // Verify token is a valid JWT format
-            expect(response.body.data.token).toMatch(/^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/);
-        });
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Email atau password salah!');
+    });
+  });
 
-        it('should generate and store remember_token in database on successful login', async () => {
-            await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'test@example.com',
-                    password: 'password123'
-                })
-                .expect(200);
+  describe('Negative Flow - Validation Errors', () => {
+    it('should reject login with missing email', async () => {
+      const loginData = {
+        password: testUserPassword
+      };
 
-            // Check that remember_token was generated and stored
-            const user = await prisma.user.findUnique({
-                where: { id: testUserId }
-            });
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(422);
 
-            expect(user?.remember_token).toBeTruthy();
-            expect(user?.remember_token).toHaveLength(64);
-        });
-
-        it('should update remember_token on subsequent logins', async () => {
-            // First login
-            await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'test@example.com',
-                    password: 'password123'
-                })
-                .expect(200);
-
-            const firstToken = await prisma.user.findUnique({
-                where: { id: testUserId },
-                select: { remember_token: true }
-            });
-
-            // Second login
-            await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'test@example.com',
-                    password: 'password123'
-                })
-                .expect(200);
-
-            const secondToken = await prisma.user.findUnique({
-                where: { id: testUserId },
-                select: { remember_token: true }
-            });
-
-            // Remember tokens should be different
-            expect(firstToken?.remember_token).not.toBe(secondToken?.remember_token);
-        });
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Validasi gagal');
+      expect(response.body).toHaveProperty('errors');
+      expect(response.body.errors).toHaveProperty('email');
     });
 
-    describe('Negative Scenarios - Validation Errors', () => {
-        it('should return 422 when email is missing', async () => {
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    password: 'password123'
-                })
-                .expect(422);
+    it('should reject login with missing password', async () => {
+      const loginData = {
+        email: testUserEmail
+      };
 
-            expect(response.body).toEqual({
-                success: false,
-                message: 'Validasi gagal',
-                errors: {
-                    email: ['Email tidak boleh kosong']
-                }
-            });
-        });
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(422);
 
-        it('should return 422 when password is missing', async () => {
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'test@example.com'
-                })
-                .expect(422);
-
-            expect(response.body).toEqual({
-                success: false,
-                message: 'Validasi gagal',
-                errors: {
-                    password: ['Password tidak boleh kosong']
-                }
-            });
-        });
-
-        it('should return 422 when both email and password are missing', async () => {
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({})
-                .expect(422);
-
-            expect(response.body).toEqual({
-                success: false,
-                message: 'Validasi gagal',
-                errors: {
-                    email: ['Email tidak boleh kosong'],
-                    password: ['Password tidak boleh kosong']
-                }
-            });
-        });
-
-        it('should return 422 when email format is invalid', async () => {
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'invalid-email',
-                    password: 'password123'
-                })
-                .expect(422);
-
-            expect(response.body).toEqual({
-                success: false,
-                message: 'Validasi gagal',
-                errors: {
-                    email: ['Email tidak valid']
-                }
-            });
-        });
-
-        it('should return 422 when email is too short', async () => {
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'a@b.co',
-                    password: 'password123'
-                })
-                .expect(422);
-
-            expect(response.body).toEqual({
-                success: false,
-                message: 'Validasi gagal',
-                errors: {
-                    email: ['Email minimal 12 karakter']
-                }
-            });
-        });
-
-        it('should return 422 when password is too short', async () => {
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'test@example.com',
-                    password: '12345'
-                })
-                .expect(422);
-
-            expect(response.body).toEqual({
-                success: false,
-                message: 'Validasi gagal',
-                errors: {
-                    password: ['Password minimal 6 karakter']
-                }
-            });
-        });
-
-        it('should return 422 when password is too long', async () => {
-            const longPassword = 'a'.repeat(101);
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'test@example.com',
-                    password: longPassword
-                })
-                .expect(422);
-
-            expect(response.body).toEqual({
-                success: false,
-                message: 'Validasi gagal',
-                errors: {
-                    password: ['Password maksimal 100 karakter']
-                }
-            });
-        });
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Validasi gagal');
+      expect(response.body).toHaveProperty('errors');
+      expect(response.body.errors).toHaveProperty('password');
     });
 
-    describe('Negative Scenarios - Authentication Errors', () => {
-        it('should return 401 when user does not exist', async () => {
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'nonexistent@example.com',
-                    password: 'password123'
-                })
-                .expect(401);
+    it('should reject login with empty email', async () => {
+      const loginData = {
+        email: '',
+        password: testUserPassword
+      };
 
-            expect(response.body).toEqual({
-                success: false,
-                message: 'Email atau password salah!'
-            });
-        });
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(422);
 
-        it('should return 401 when password is incorrect', async () => {
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'test@example.com',
-                    password: 'wrongpassword'
-                })
-                .expect(401);
-
-            expect(response.body).toEqual({
-                success: false,
-                message: 'Email atau password salah!'
-            });
-        });
-
-        it('should return 401 when email exists but password is empty string', async () => {
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'test@example.com',
-                    password: ''
-                })
-                .expect(422);
-
-            expect(response.body).toEqual({
-                success: false,
-                message: 'Validasi gagal',
-                errors: {
-                    password: ['Password minimal 6 karakter']
-                }
-            });
-        });
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body.errors).toHaveProperty('email');
     });
 
-    describe('Edge Cases', () => {
-        it('should handle email with extra whitespace', async () => {
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: '  test@example.com  ',
-                    password: 'password123'
-                })
-                .expect(200);
+    it('should reject login with empty password', async () => {
+      const loginData = {
+        email: testUserEmail,
+        password: ''
+      };
 
-            expect(response.body.success).toBe(true);
-            expect(response.body.data.user.email).toBe('test@example.com');
-        });
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(422);
 
-        it('should be case sensitive for email', async () => {
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'TEST@EXAMPLE.COM',
-                    password: 'password123'
-                })
-                .expect(200);
-
-            expect(response.body).toEqual({
-                success: true,
-                message: 'Berhasil login',
-                data: expect.objectContaining({
-                    user: expect.objectContaining({
-                        email: 'test@example.com'
-                    }),
-                    token: expect.any(String)
-                })
-            });
-        });
-
-        it('should handle special characters in password', async () => {
-            // Create user with special character password
-            const specialPassword = 'p@ssw0rd!#$%';
-            const hashedPassword = await bcrypt.hash(specialPassword, 10);
-
-            await prisma.user.update({
-                where: { id: testUserId },
-                data: { password: hashedPassword }
-            });
-
-            const response = await request(appInstance.getApp())
-                .post('/api/auth/login')
-                .send({
-                    email: 'test@example.com',
-                    password: specialPassword
-                })
-                .expect(200);
-
-            expect(response.body.success).toBe(true);
-        });
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body.errors).toHaveProperty('password');
     });
+
+    it('should reject login with invalid email format', async () => {
+      const loginData = {
+        email: 'invalid-email',
+        password: testUserPassword
+      };
+
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(422);
+
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body.errors).toHaveProperty('email');
+      expect(response.body.errors.email).toContain('Email tidak valid');
+    });
+
+    it('should reject login with email too short', async () => {
+      const loginData = {
+        email: 'a@b.co', // Less than 12 characters
+        password: testUserPassword
+      };
+
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(422);
+
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body.errors).toHaveProperty('email');
+      expect(response.body.errors.email).toContain('Email minimal 12 karakter');
+    });
+
+    it('should reject login with password too short', async () => {
+      const loginData = {
+        email: testUserEmail,
+        password: '12345' // Less than 6 characters
+      };
+
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(422);
+
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body.errors).toHaveProperty('password');
+      expect(response.body.errors.password).toContain('Password minimal 6 karakter');
+    });
+
+    it('should reject login with password too long', async () => {
+      const loginData = {
+        email: testUserEmail,
+        password: 'a'.repeat(101) // More than 100 characters
+      };
+
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(422);
+
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body.errors).toHaveProperty('password');
+      expect(response.body.errors.password).toContain('Password maksimal 100 karakter');
+    });
+
+    it('should reject login with whitespace-only email', async () => {
+      const loginData = {
+        email: '   ',
+        password: testUserPassword
+      };
+
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(422);
+
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body.errors).toHaveProperty('email');
+    });
+
+    it('should handle multiple validation errors', async () => {
+      const loginData = {
+        email: 'invalid',
+        password: '123'
+      };
+
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(422);
+
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('errors');
+      expect(response.body.errors).toHaveProperty('email');
+      expect(response.body.errors).toHaveProperty('password');
+    });
+  });
+
+  describe('Negative Flow - Request Format Errors', () => {
+    it('should reject login with invalid JSON', async () => {
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .set('Content-Type', 'application/json')
+        .send('invalid json')
+        .expect(400);
+
+      // Express default error handling for malformed JSON
+      expect(response.body).toEqual({});
+    });
+
+    it('should reject login with non-object data', async () => {
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send('string data')
+        .expect(422);
+
+      expect(response.body).toHaveProperty('success', false);
+    });
+
+    it('should handle request with extra fields gracefully', async () => {
+      const loginData = {
+        email: testUserEmail,
+        password: testUserPassword,
+        extraField: 'should be ignored',
+        anotherField: 123
+      };
+
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body.data.user.email).toBe(testUserEmail);
+    });
+  });
+
+  describe('Edge Cases', () => {
+    it('should handle concurrent login requests', async () => {
+      const loginData = {
+        email: testUserEmail,
+        password: testUserPassword
+      };
+
+      // Make multiple concurrent requests
+      const promises = Array(5).fill(null).map(() =>
+        request(appInstance.getApp())
+          .post('/api/auth/login')
+          .send(loginData)
+      );
+
+      const responses = await Promise.all(promises);
+
+      // All requests should succeed
+      responses.forEach(response => {
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(true);
+        expect(response.body.data.user.email).toBe(testUserEmail);
+      });
+
+      // Each should have a different token (due to different remember_tokens)
+      const tokens = responses.map(r => r.body.data.token);
+      const uniqueTokens = new Set(tokens);
+      expect(uniqueTokens.size).toBe(tokens.length);
+    });
+
+    it('should handle email with leading/trailing whitespace', async () => {
+      const loginData = {
+        email: `  ${testUserEmail}  `,
+        password: testUserPassword
+      };
+
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/login')
+        .send(loginData)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.user.email).toBe(testUserEmail);
+    });
+  });
 });

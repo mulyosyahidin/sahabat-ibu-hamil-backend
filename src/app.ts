@@ -6,15 +6,36 @@
  */
 
 import express from 'express';
+import cors from 'cors';
 import router from './routes/router';
 
 /**
  * Initialize application middleware
- * Sets up JSON parsing and other essential middleware
+ * Sets up JSON parsing, CORS, and other essential middleware
  * 
  * @param app - Express application instance
  */
 const initializeMiddlewares = (app: express.Application): void => {
+  // Configure CORS to allow all requests from localhost on any port
+  const corsOptions = {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      // Allow all localhost requests regardless of port
+      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        return callback(null, true);
+      }
+      
+      // Reject other origins
+      callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true, // Allow cookies and credentials
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  };
+
+  app.use(cors(corsOptions));
   app.use(express.json());
 };
 

@@ -11,3 +11,5 @@
 
 export * from './jwt.util';
 export * from './validation.util';
+export * from './error.util';
+export * from './code.util';

@@ -10,3 +10,4 @@
  */
 
 export * from './auth.validation';
+export * from './device.validation';

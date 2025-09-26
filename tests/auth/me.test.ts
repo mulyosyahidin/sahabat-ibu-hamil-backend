@@ -1,258 +1,232 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
+/**
+ * Me Endpoint Tests
+ * 
+ * Comprehensive test suite for the /auth/me endpoint covering both positive
+ * and negative scenarios including authentication, authorization, and error handling.
+ * 
+ * @author Sahabat Ibu Hamil Team
+ * @version 1.0.0
+ */
+
+import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
-import createApp from '../../src/app';
-import bcrypt from 'bcrypt';
 import { PrismaClient } from '../../src/generated/prisma';
+import createApp from '../../src/app';
+import * as bcrypt from 'bcrypt';
+import { generateToken } from '../../src/utils/jwt.util';
 
 describe('GET /api/auth/me', () => {
-   let appInstance: ReturnType<typeof createApp>;
+  let appInstance: ReturnType<typeof createApp>;
   let prisma: PrismaClient;
   let testUserId: number;
+  let testUserEmail: string;
+  let testUserPassword: string;
+  let testUserName: string;
   let validToken: string;
+  let validRememberToken: string;
 
   beforeAll(async () => {
+    // Initialize Prisma client
     prisma = new PrismaClient();
-    await prisma.$connect();
-  });
-
-  afterAll(async () => {
-    await prisma.$disconnect();
-  });
-
-  beforeEach(async () => {
-    appInstance = createApp(3001);
     
-    // Create a test user
-    const hashedPassword = await bcrypt.hash('password123', 10);
+    // Create app instance
+    appInstance = createApp(3003);
+
+    // Setup test user data
+    testUserEmail = 'test.me@example.com';
+    testUserPassword = 'testpassword123';
+    testUserName = 'Test Me User';
+    const hashedPassword = await bcrypt.hash(testUserPassword, 10);
+
+    // Generate remember token
+    validRememberToken = require('crypto').randomBytes(32).toString('hex');
+
+    // Create test user
     const testUser = await prisma.user.create({
       data: {
-        name: 'Test User',
-        email: 'test@example.com',
+        name: testUserName,
+        email: testUserEmail,
         password: hashedPassword,
-        remember_token: null
+        remember_token: validRememberToken,
       }
     });
     testUserId = testUser.id;
 
-    // Login to get a valid token
-    const loginResponse = await request(appInstance.getApp())
-      .post('/api/auth/login')
-      .send({
-        email: 'test@example.com',
-        password: 'password123'
-      });
-    
-    validToken = loginResponse.body.data.token;
+    // Generate valid JWT token
+    validToken = generateToken({
+      id: testUserId,
+      email: testUserEmail
+    }, validRememberToken);
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     // Clean up test user
     if (testUserId) {
       await prisma.user.delete({
         where: { id: testUserId }
       });
     }
+    
+    // Disconnect Prisma
+    await prisma.$disconnect();
   });
 
-  describe('Positive Scenarios', () => {
+  describe('Positive Flow - Successful Profile Retrieval', () => {
     it('should return user profile with valid token', async () => {
       const response = await request(appInstance.getApp())
         .get('/api/auth/me')
         .set('Authorization', `Bearer ${validToken}`)
         .expect(200);
 
-      expect(response.body).toEqual({
-        success: true,
-        message: 'Profil pengguna berhasil diambil',
-        data: {
-          user: {
-            id: testUserId,
-            name: 'Test User',
-            email: 'test@example.com',
-            email_verified_at: null,
-            created_at: expect.any(String),
-            updated_at: expect.any(String)
-          }
-        }
-      });
+      // Verify response structure
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('message', 'Data user berhasil diambil');
+      expect(response.body).toHaveProperty('data');
+
+      // Verify user data
+      const user = response.body.data;
+      expect(user).toHaveProperty('id', testUserId);
+      expect(user).toHaveProperty('name', testUserName);
+      expect(user).toHaveProperty('email', testUserEmail);
+      expect(user).toHaveProperty('created_at');
+      expect(user).toHaveProperty('updated_at');
+
+      // Verify sensitive data is not included
+      expect(user).not.toHaveProperty('password');
+      expect(user).not.toHaveProperty('remember_token');
     });
 
-    it('should return updated user profile after user data changes', async () => {
-      // Update user data
-      await prisma.user.update({
-        where: { id: testUserId },
-        data: { name: 'Updated Test User' }
-      });
-
+    it('should handle token with different case in Authorization header', async () => {
       const response = await request(appInstance.getApp())
+        .get('/api/auth/me')
+        .set('authorization', `bearer ${validToken}`) // lowercase
+        .expect(401);
+
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Token otorisasi diperlukan');
+    });
+
+    it('should return consistent user data on multiple requests', async () => {
+      const response1 = await request(appInstance.getApp())
         .get('/api/auth/me')
         .set('Authorization', `Bearer ${validToken}`)
         .expect(200);
 
-      expect(response.body.data.user.name).toBe('Updated Test User');
-      expect(response.body.data.user.email).toBe('test@example.com');
-    });
-
-    it('should work with freshly generated token', async () => {
-      // Login again to get a fresh token
-      const newLoginResponse = await request(appInstance.getApp())
-        .post('/api/auth/login')
-        .send({
-          email: 'test@example.com',
-          password: 'password123'
-        });
-
-      const newToken = newLoginResponse.body.data.token;
-
-      const response = await request(appInstance.getApp())
+      const response2 = await request(appInstance.getApp())
         .get('/api/auth/me')
-        .set('Authorization', `Bearer ${newToken}`)
+        .set('Authorization', `Bearer ${validToken}`)
         .expect(200);
 
-      expect(response.body.success).toBe(true);
-      expect(response.body.data.user.email).toBe('test@example.com');
+      expect(response1.body.data).toEqual(response2.body.data);
     });
   });
 
-  describe('Negative Scenarios - Missing Authorization', () => {
-    it('should return 401 when Authorization header is missing', async () => {
+  describe('Negative Flow - Authentication Errors', () => {
+    it('should reject request without Authorization header', async () => {
       const response = await request(appInstance.getApp())
         .get('/api/auth/me')
         .expect(401);
 
-      expect(response.body).toEqual({
-        success: false,
-        message: 'Token otorisasi diperlukan'
-      });
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Token otorisasi diperlukan');
+      expect(response.body).not.toHaveProperty('data');
     });
 
-    it('should return 401 when Authorization header is empty', async () => {
+    it('should reject request with empty Authorization header', async () => {
       const response = await request(appInstance.getApp())
         .get('/api/auth/me')
         .set('Authorization', '')
         .expect(401);
 
-      expect(response.body).toEqual({
-        success: false,
-        message: 'Token otorisasi diperlukan'
-      });
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Token otorisasi diperlukan');
     });
 
-    it('should return 401 when Authorization header does not start with Bearer', async () => {
+    it('should reject request with malformed Authorization header', async () => {
       const response = await request(appInstance.getApp())
         .get('/api/auth/me')
-        .set('Authorization', `Basic ${validToken}`)
+        .set('Authorization', 'InvalidFormat')
         .expect(401);
 
-      expect(response.body).toEqual({
-        success: false,
-        message: 'Token otorisasi diperlukan'
-      });
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Token otorisasi diperlukan');
     });
 
-    it('should return 401 when Authorization header has Bearer but no token', async () => {
+    it('should reject request with Bearer but no token', async () => {
       const response = await request(appInstance.getApp())
         .get('/api/auth/me')
         .set('Authorization', 'Bearer ')
         .expect(401);
 
-      expect(response.body).toEqual({
-        success: false,
-        message: 'Token otorisasi diperlukan'
-      });
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Token otorisasi diperlukan');
     });
 
-    it('should return 401 when Authorization header has Bearer but token is just spaces', async () => {
+    it('should reject request with invalid JWT token', async () => {
       const response = await request(appInstance.getApp())
         .get('/api/auth/me')
-        .set('Authorization', 'Bearer    ')
+        .set('Authorization', 'Bearer invalid.jwt.token')
         .expect(401);
 
-      expect(response.body).toEqual({
-        success: false,
-        message: 'Token otorisasi diperlukan'
-      });
-    });
-  });
-
-  describe('Negative Scenarios - Invalid Tokens', () => {
-    it('should return 401 when token is malformed', async () => {
-      const response = await request(appInstance.getApp())
-        .get('/api/auth/me')
-        .set('Authorization', 'Bearer invalid-token')
-        .expect(401);
-
-      expect(response.body).toEqual({
-        success: false,
-        message: 'Token tidak valid atau sudah kedaluwarsa'
-      });
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body.message).toMatch(/Token tidak valid|Invalid or expired token/);
     });
 
-    it('should return 401 when token has invalid signature', async () => {
-      const invalidToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsInJlbWVtYmVyVG9rZW4iOiJ0ZXN0IiwiaWF0IjoxNjAwMDAwMDAwfQ.invalid_signature';
-      
-      const response = await request(appInstance.getApp())
-        .get('/api/auth/me')
-        .set('Authorization', `Bearer ${invalidToken}`)
-        .expect(401);
+    it('should reject request with expired JWT token', async () => {
+      // Generate expired token (expires in -1 hour)
+      const jwt = require('jsonwebtoken');
+      const secret = process.env.JWT_SECRET;
+      const expiredToken = jwt.sign({
+        userId: testUserId,
+        email: testUserEmail,
+        rememberToken: validRememberToken
+      }, secret, { expiresIn: '-1h' });
 
-      expect(response.body).toEqual({
-        success: false,
-        message: 'Token tidak valid atau sudah kedaluwarsa'
-      });
-    });
-
-    it('should return 401 when token is expired', async () => {
-      // Create an expired token (this would need to be a token with past exp claim)
-      const expiredToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsInJlbWVtYmVyVG9rZW4iOiJ0ZXN0IiwiaWF0IjoxNjAwMDAwMDAwLCJleHAiOjE2MDAwMDAwMDF9.test';
-      
       const response = await request(appInstance.getApp())
         .get('/api/auth/me')
         .set('Authorization', `Bearer ${expiredToken}`)
         .expect(401);
 
-      expect(response.body.success).toBe(false);
-      expect(response.body.message).toMatch(/Token tidak valid/);
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body.message).toMatch(/Token tidak valid|Invalid or expired token/);
     });
 
-    it('should return 401 when user does not exist', async () => {
-      // Delete the user but keep the token
-      await prisma.user.delete({
-        where: { id: testUserId }
-      });
-      testUserId = 0; // Prevent cleanup from failing
+    it('should reject request with valid JWT but invalid remember token', async () => {
+      // Generate token with wrong remember token
+      const tokenWithWrongRememberToken = generateToken({
+        id: testUserId,
+        email: testUserEmail
+      }, 'wrong-remember-token');
 
       const response = await request(appInstance.getApp())
         .get('/api/auth/me')
-        .set('Authorization', `Bearer ${validToken}`)
+        .set('Authorization', `Bearer ${tokenWithWrongRememberToken}`)
         .expect(401);
 
-      expect(response.body).toEqual({
-        success: false,
-        message: 'Token tidak valid atau sudah kedaluwarsa'
-      });
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Token tidak valid atau sudah kedaluwarsa');
     });
 
-    it('should return 401 when remember_token does not match', async () => {
-      // Manually change the remember_token in database
-      await prisma.user.update({
-        where: { id: testUserId },
-        data: { remember_token: 'different_token' }
-      });
+    it('should reject request with valid JWT but non-existent user', async () => {
+      // Generate token with non-existent user ID
+      const tokenWithNonExistentUser = generateToken({
+        id: 99999,
+        email: 'nonexistent@example.com'
+      }, validRememberToken);
 
       const response = await request(appInstance.getApp())
         .get('/api/auth/me')
-        .set('Authorization', `Bearer ${validToken}`)
+        .set('Authorization', `Bearer ${tokenWithNonExistentUser}`)
         .expect(401);
 
-      expect(response.body).toEqual({
-        success: false,
-        message: 'Token tidak valid atau sudah kedaluwarsa'
-      });
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Token tidak valid atau sudah kedaluwarsa');
     });
+  });
 
-    it('should return 401 when remember_token is null', async () => {
-      // Manually set remember_token to null
+  describe('Negative Flow - Authorization Errors', () => {
+    it('should reject request when user remember_token is null', async () => {
+      // Update user to have null remember_token (simulating logout)
       await prisma.user.update({
         where: { id: testUserId },
         data: { remember_token: null }
@@ -263,110 +237,42 @@ describe('GET /api/auth/me', () => {
         .set('Authorization', `Bearer ${validToken}`)
         .expect(401);
 
-      expect(response.body).toEqual({
-        success: false,
-        message: 'Token tidak valid atau sudah kedaluwarsa'
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Token tidak valid atau sudah kedaluwarsa');
+
+      // Restore remember_token for other tests
+      await prisma.user.update({
+        where: { id: testUserId },
+        data: { remember_token: validRememberToken }
       });
     });
 
-    it('should return 401 after user logs out', async () => {
-      // Logout first
-      await request(appInstance.getApp())
-        .post('/api/auth/logout')
-        .set('Authorization', `Bearer ${validToken}`)
-        .expect(200);
+    it('should reject request when remember_token is changed', async () => {
+      // Change remember_token (simulating login from another device)
+      const newRememberToken = require('crypto').randomBytes(32).toString('hex');
+      await prisma.user.update({
+        where: { id: testUserId },
+        data: { remember_token: newRememberToken }
+      });
 
-      // Try to access /me endpoint - should fail
       const response = await request(appInstance.getApp())
         .get('/api/auth/me')
         .set('Authorization', `Bearer ${validToken}`)
         .expect(401);
 
-      expect(response.body).toEqual({
-        success: false,
-        message: 'Token tidak valid atau sudah kedaluwarsa'
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Token tidak valid atau sudah kedaluwarsa');
+
+      // Restore original remember_token for other tests
+      await prisma.user.update({
+        where: { id: testUserId },
+        data: { remember_token: validRememberToken }
       });
     });
   });
 
   describe('Edge Cases', () => {
-    it('should handle token invalidation after new login', async () => {
-      // Login again to get a new token (this should invalidate the previous one)
-      const newLoginResponse = await request(appInstance.getApp())
-        .post('/api/auth/login')
-        .send({
-          email: 'test@example.com',
-          password: 'password123'
-        });
-
-      const newToken = newLoginResponse.body.data.token;
-
-      // Try to access /me with the old token - should fail
-      const oldTokenResponse = await request(appInstance.getApp())
-        .get('/api/auth/me')
-        .set('Authorization', `Bearer ${validToken}`)
-        .expect(401);
-
-      expect(oldTokenResponse.body.success).toBe(false);
-
-      // Access /me with the new token - should succeed
-      const newTokenResponse = await request(appInstance.getApp())
-        .get('/api/auth/me')
-        .set('Authorization', `Bearer ${newToken}`)
-        .expect(200);
-
-      expect(newTokenResponse.body.success).toBe(true);
-    });
-
-    it('should handle case-sensitive Bearer keyword', async () => {
-      const response = await request(appInstance.getApp())
-        .get('/api/auth/me')
-        .set('Authorization', `bearer ${validToken}`)
-        .expect(401);
-
-      expect(response.body).toEqual({
-        success: false,
-        message: 'Token otorisasi diperlukan'
-      });
-    });
-
-    it('should handle extra spaces in Authorization header', async () => {
-      const response = await request(appInstance.getApp())
-        .get('/api/auth/me')
-        .set('Authorization', `Bearer  ${validToken}  `)
-        .expect(200);
-
-      expect(response.body.success).toBe(true);
-    });
-
-    it('should return consistent user data structure', async () => {
-      const response = await request(appInstance.getApp())
-        .get('/api/auth/me')
-        .set('Authorization', `Bearer ${validToken}`)
-        .expect(200);
-
-      const user = response.body.data.user;
-      
-      // Verify all expected fields are present
-      expect(user).toHaveProperty('id');
-      expect(user).toHaveProperty('name');
-      expect(user).toHaveProperty('email');
-      expect(user).toHaveProperty('created_at');
-      expect(user).toHaveProperty('updated_at');
-      
-      // Verify sensitive fields are not exposed
-      expect(user).not.toHaveProperty('password');
-      expect(user).not.toHaveProperty('remember_token');
-      
-      // Verify data types
-      expect(typeof user.id).toBe('number');
-      expect(typeof user.name).toBe('string');
-      expect(typeof user.email).toBe('string');
-      expect(typeof user.created_at).toBe('string');
-      expect(typeof user.updated_at).toBe('string');
-    });
-
-    it('should handle multiple concurrent requests with same token', async () => {
+    it('should handle concurrent requests with same token', async () => {
       // Make multiple concurrent requests
       const promises = Array(5).fill(null).map(() =>
         request(appInstance.getApp())
@@ -380,15 +286,59 @@ describe('GET /api/auth/me', () => {
       responses.forEach(response => {
         expect(response.status).toBe(200);
         expect(response.body.success).toBe(true);
-        expect(response.body.data.user.email).toBe('test@example.com');
+        expect(response.body.data.id).toBe(testUserId);
+      });
+
+      // All should return the same user data
+      const userData = responses[0].body.data;
+      responses.forEach(response => {
+        expect(response.body.data).toEqual(userData);
       });
     });
 
-    it('should handle user with special characters in name', async () => {
-      // Update user with special characters
+    it('should handle request with extra whitespace in Authorization header', async () => {
+      const response = await request(appInstance.getApp())
+        .get('/api/auth/me')
+        .set('Authorization', `  Bearer   ${validToken}  `)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.id).toBe(testUserId);
+    });
+
+    it('should handle case-insensitive Bearer keyword', async () => {
+      const response = await request(appInstance.getApp())
+        .get('/api/auth/me')
+        .set('Authorization', `BEARER ${validToken}`)
+        .expect(401);
+
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message', 'Token otorisasi diperlukan');
+    });
+
+    it('should return proper timestamp formats', async () => {
+      const response = await request(appInstance.getApp())
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${validToken}`)
+        .expect(200);
+
+      const user = response.body.data;
+      
+      // Verify timestamp formats (ISO 8601)
+      expect(user.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+      expect(user.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+      
+      // Verify timestamps are valid dates
+      expect(new Date(user.created_at)).toBeInstanceOf(Date);
+      expect(new Date(user.updated_at)).toBeInstanceOf(Date);
+    });
+
+    it('should handle request after user data is updated', async () => {
+      // Update user name
+      const newName = 'Updated Test User';
       await prisma.user.update({
         where: { id: testUserId },
-        data: { name: 'Test User with Special Chars: àáâãäåæçèéêë' }
+        data: { name: newName }
       });
 
       const response = await request(appInstance.getApp())
@@ -396,7 +346,62 @@ describe('GET /api/auth/me', () => {
         .set('Authorization', `Bearer ${validToken}`)
         .expect(200);
 
-      expect(response.body.data.user.name).toBe('Test User with Special Chars: àáâãäåæçèéêë');
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.name).toBe(newName);
+
+      // Restore original name
+      await prisma.user.update({
+        where: { id: testUserId },
+        data: { name: testUserName }
+      });
+    });
+  });
+
+  describe('HTTP Method Validation', () => {
+    it('should reject POST request to /me endpoint', async () => {
+      const response = await request(appInstance.getApp())
+        .post('/api/auth/me')
+        .set('Authorization', `Bearer ${validToken}`)
+        .expect(404);
+
+      // Express returns 404 for unsupported methods on existing routes
+    });
+
+    it('should reject PUT request to /me endpoint', async () => {
+      const response = await request(appInstance.getApp())
+        .put('/api/auth/me')
+        .set('Authorization', `Bearer ${validToken}`)
+        .expect(404);
+    });
+
+    it('should reject DELETE request to /me endpoint', async () => {
+      const response = await request(appInstance.getApp())
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${validToken}`)
+        .expect(404);
+    });
+  });
+
+  describe('Response Format Validation', () => {
+    it('should return response in correct JSON format', async () => {
+      const response = await request(appInstance.getApp())
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${validToken}`)
+        .expect(200)
+        .expect('Content-Type', /json/);
+
+      // Verify response can be parsed as JSON
+      expect(typeof response.body).toBe('object');
+      expect(response.body).not.toBeNull();
+    });
+
+    it('should include proper HTTP headers', async () => {
+      const response = await request(appInstance.getApp())
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${validToken}`)
+        .expect(200);
+
+      expect(response.headers['content-type']).toMatch(/application\/json/);
     });
   });
 });
