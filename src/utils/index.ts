@@ -9,7 +9,8 @@
  * @version 1.0.0
  */
 
+export * from './code.util';
+export * from './error.util';
 export * from './jwt.util';
 export * from './validation.util';
-export * from './error.util';
-export * from './code.util';
+export * from './app-instance.util';

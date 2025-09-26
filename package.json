@@ -58,12 +58,15 @@
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",
+    "@types/socket.io": "^3.0.1",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.15.1",
+    "socket.io": "^4.8.1",
+    "wa-multi-session": "^3.8.3",
     "zod": "^4.1.11"
   }
 }

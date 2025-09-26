@@ -7,6 +7,7 @@
 
 import dotenv from 'dotenv';
 import createApp from './app';
+import { appInstanceManager } from './utils/app-instance.util';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -16,4 +17,8 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
 // Create and start the application instance
 const appInstance = createApp(PORT);
+
+// Set WhatsApp service in global manager
+appInstanceManager.setWhatsAppService(appInstance.getWhatsAppService());
+
 appInstance.listen();

@@ -19,6 +19,7 @@ import type { CreateDeviceRequest, UpdateDeviceRequest } from '../models/request
 import { createDeviceValidationSchema, updateDeviceValidationSchema } from '../validations/device.validation';
 import { AppError } from '../utils/error.util';
 import { toDeviceResponseData, type DevicesListData } from '../models/responses/device.response';
+import { appInstanceManager } from '../utils/app-instance.util';
 
 export class DeviceController {
   private deviceService: DeviceService;
@@ -26,6 +27,9 @@ export class DeviceController {
   constructor() {
     const prisma = new PrismaClient();
     this.deviceService = new DeviceService(prisma);
+    
+    // Register device service in app instance manager
+    appInstanceManager.setDeviceService(this.deviceService);
   }
 
   /**
@@ -186,6 +190,68 @@ export class DeviceController {
       res.json(ApiResponse.success('Device berhasil dihapus'));
     } catch (error) {
       console.error('Delete device error:', error);
+      
+      if (error instanceof AppError) {
+        res.status(error.statusCode).json(ApiResponse.error(error.message));
+        return;
+      }
+
+      res.status(500).json(ApiResponse.error('Internal server error'));
+    }
+  };
+
+  /**
+   * Request device connection
+   * POST /devices/:id/request-connection
+   */
+  requestConnection = async (
+    req: Request<{ id: string }, unknown, unknown, ParsedQs>,
+    res: Response
+  ): Promise<void> => {
+    try {
+      const deviceId = parseInt(req.params.id);
+      
+      if (isNaN(deviceId)) {
+        res.status(400).json(ApiResponse.error('Invalid device ID'));
+        return;
+      }
+      
+      await this.deviceService.requestDeviceConnection(deviceId);
+      
+      res.json(ApiResponse.success('Request koneksi perangkat berhasil dikirim'));
+    } catch (error) {
+      console.error('Request device connection error:', error);
+      
+      if (error instanceof AppError) {
+        res.status(error.statusCode).json(ApiResponse.error(error.message));
+        return;
+      }
+
+      res.status(500).json(ApiResponse.error('Internal server error'));
+    }
+  };
+
+  /**
+   * Disconnect device
+   * POST /devices/:id/disconnect
+   */
+  disconnect = async (
+    req: Request<{ id: string }, unknown, unknown, ParsedQs>,
+    res: Response
+  ): Promise<void> => {
+    try {
+      const deviceId = parseInt(req.params.id);
+      
+      if (isNaN(deviceId)) {
+        res.status(400).json(ApiResponse.error('Invalid device ID'));
+        return;
+      }
+      
+      await this.deviceService.disconnectDevice(deviceId);
+      
+      res.json(ApiResponse.success('Device berhasil didisconnect'));
+    } catch (error) {
+      console.error('Disconnect device error:', error);
       
       if (error instanceof AppError) {
         res.status(error.statusCode).json(ApiResponse.error(error.message));

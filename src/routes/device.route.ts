@@ -45,4 +45,16 @@ router.put('/:id', authMiddleware, deviceController.update);
  */
 router.delete('/:id', authMiddleware, deviceController.delete);
 
+/**
+ * POST /devices/:id/request-connection
+ * Request WhatsApp connection for device (requires authentication)
+ */
+router.post('/:id/request-connection', authMiddleware, deviceController.requestConnection);
+
+/**
+ * POST /devices/:id/disconnect
+ * Disconnect WhatsApp session for device (requires authentication)
+ */
+router.post('/:id/disconnect', authMiddleware, deviceController.disconnect);
+
 export default router;
