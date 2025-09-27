@@ -24,6 +24,21 @@ export class DeviceService {
   }
 
   /**
+   * Reconnect device using existing session files
+   * @param deviceCode - Device code to reconnect
+   */
+  async reconnectDevice(deviceCode: string): Promise<void> {
+    // Get WhatsApp service instance
+    const whatsappService = appInstanceManager.getWhatsAppService();
+    if (!whatsappService) {
+      throw new InternalServerError('WhatsApp service tidak tersedia');
+    }
+
+    // Use WhatsApp service reconnect method
+    await whatsappService.reconnectDevice(deviceCode);
+  }
+
+  /**
    * Create a new device
    */
   async createDevice(data: CreateDeviceRequest): Promise<DeviceDto> {
@@ -62,8 +77,9 @@ export class DeviceService {
       id: device.id,
       name: device.name,
       code: device.code,
-      status: device.status as any,
+      status: device.status,
       phone_number: device.phone_number,
+      device_id: device.device_id,
       created_at: device.created_at,
       updated_at: device.updated_at,
       deleted_at: device.deleted_at,
@@ -98,8 +114,9 @@ export class DeviceService {
       id: device.id,
       name: device.name,
       code: device.code,
-      status: device.status as any,
+      status: device.status,
       phone_number: device.phone_number,
+      device_id: device.device_id,
       created_at: device.created_at,
       updated_at: device.updated_at,
       deleted_at: device.deleted_at,
@@ -124,36 +141,13 @@ export class DeviceService {
       throw new NotFoundError('Device tidak ditemukan');
     }
 
-    // Check if session exists for this device
-    let updatedStatus = device.status;
-    if (device.status === 'connected') {
-      const whatsappService = appInstanceManager.getWhatsAppService();
-      if (whatsappService) {
-        const session = whatsappService.getSession(device.code);
-        
-        // If session doesn't exist but device status is connected, update to disconnected
-        if (!session) {
-          console.log(`Session not found for device ${device.code}, updating status to disconnected`);
-          
-          await this.prisma.device.update({
-            where: { id: device.id },
-            data: { 
-              status: 'disconnected',
-              updated_at: new Date()
-            }
-          });
-          
-          updatedStatus = 'disconnected';
-        }
-      }
-    }
-
     return {
       id: device.id,
       name: device.name,
       code: device.code,
-      status: updatedStatus as any,
+      status: device.status,
       phone_number: device.phone_number,
+      device_id: device.device_id,
       created_at: device.created_at,
       updated_at: device.updated_at,
       deleted_at: device.deleted_at,
@@ -164,10 +158,28 @@ export class DeviceService {
    * Get device by code
    */
   async getDeviceByCode(code: string): Promise<DeviceDto | null> {
-    // TODO: Implement get device by code
-    // - Find device by unique code
-    // - Return device or null if not found
-    throw new Error('Method not implemented');
+    const device = await this.prisma.device.findUnique({
+      where: {
+        code: code,
+        deleted_at: null,
+      }
+    });
+
+    if (!device) {
+      throw new NotFoundError('Device tidak ditemukan');
+    }
+
+    return {
+      id: device.id,
+      name: device.name,
+      code: device.code,
+      status: device.status,
+      phone_number: device.phone_number,
+      device_id: device.device_id,
+      created_at: device.created_at,
+      updated_at: device.updated_at,
+      deleted_at: device.deleted_at,
+    };
   }
 
   /**
@@ -199,8 +211,9 @@ export class DeviceService {
       id: updatedDevice.id,
       name: updatedDevice.name,
       code: updatedDevice.code,
-      status: updatedDevice.status as any,
+      status: updatedDevice.status,
       phone_number: updatedDevice.phone_number,
+      device_id: device.device_id,
       created_at: updatedDevice.created_at,
       updated_at: updatedDevice.updated_at,
       deleted_at: updatedDevice.deleted_at,
@@ -230,109 +243,36 @@ export class DeviceService {
         deleted_at: new Date(),
       }
     });
-  }
 
-  /**
-   * Permanently delete device by ID
-   */
-  async permanentlyDeleteDevice(id: number): Promise<boolean> {
-    // TODO: Implement permanent device deletion
-    // - Check if device exists
-    // - Permanently remove from database
-    // - Return success status
-    throw new Error('Method not implemented');
-  }
+    const whatsappService = appInstanceManager.getWhatsAppService();
+    if (!whatsappService) {
+      throw new InternalServerError('WhatsApp service tidak tersedia');
+    }
 
-  /**
-   * Restore soft deleted device
-   */
-  async restoreDevice(id: number): Promise<DeviceDto> {
-    // TODO: Implement device restoration
-    // - Check if device exists and is soft deleted
-    // - Set deleted_at to null
-    // - Return restored device
-    throw new Error('Method not implemented');
+    try {
+      // Use WhatsApp service to disconnect the device
+      if (device.status == 'connected') {
+        await whatsappService.disconnectDevice(device.code);
+      }
+      console.log(`Device ${device.code} successfully disconnected via WhatsApp service`);
+    } catch (error) {
+      console.error(`Failed to disconnect device ${device.code}:`, error);
+      throw new InternalServerError('Gagal melakukan disconnect device');
+    }
   }
 
   /**
    * Request device connection via WhatsApp
    * @param deviceId - Device ID to request connection for
    */
-  async requestDeviceConnection(deviceId: number): Promise<void> {
-    // First, verify the device exists and belongs to the user
-    const device = await this.getDeviceById(deviceId);
+  async requestDeviceConnection(deviceCode: string): Promise<void> {
+    const device = await this.getDeviceByCode(deviceCode);
     if (!device) {
       throw new NotFoundError('Device tidak ditemukan');
     }
 
-    // Get WhatsApp service instance
     const whatsappService = appInstanceManager.getWhatsAppService();
-    
-    // Request connection using device code as session ID instead of device ID
     await whatsappService.requestDeviceConnection(device.code);
-  }
-
-  /**
-   * Update device when connection is established
-   * @param deviceCode - Device code (session ID)
-   * @param phoneNumber - Phone number from WhatsApp session
-   */
-  async updateDeviceOnConnection(deviceCode: string, phoneNumber: string | null): Promise<void> {
-    try {
-      const updateData: any = {
-        status: 'connected',
-        updated_at: new Date()
-      };
-
-      // Add phone number if available
-      if (phoneNumber) {
-        updateData.phone_number = phoneNumber;
-      }
-
-      await this.prisma.device.update({
-        where: { code: deviceCode },
-        data: updateData
-      });
-
-      console.log(`Device ${deviceCode} status updated to connected${phoneNumber ? ` with phone number: ${phoneNumber}` : ''}`);
-    } catch (error) {
-      console.error(`Failed to update device ${deviceCode} on connection:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Check if phone number is already registered by another device
-   * @param phoneNumber - Phone number to check
-   * @param excludeDeviceCode - Device code to exclude from check (current device)
-   * @returns true if phone number is already registered, false otherwise
-   */
-  async isPhoneNumberAlreadyRegistered(phoneNumber: string, excludeDeviceCode?: string): Promise<boolean> {
-    try {
-      const whereCondition: any = {
-        phone_number: phoneNumber,
-        deleted_at: null, // Only check active devices
-        status: {
-          in: ['connected', 'disconnected'] // Exclude draft devices
-        }
-      };
-
-      // Exclude current device from check
-      if (excludeDeviceCode) {
-        whereCondition.code = {
-          not: excludeDeviceCode
-        };
-      }
-
-      const existingDevice = await this.prisma.device.findFirst({
-        where: whereCondition
-      });
-
-      return existingDevice !== null;
-    } catch (error) {
-      console.error(`Failed to check phone number registration for ${phoneNumber}:`, error);
-      throw error;
-    }
   }
 
   /**
@@ -358,30 +298,10 @@ export class DeviceService {
       throw new InternalServerError('WhatsApp service tidak tersedia');
     }
 
-    // Check if session exists
-    const session = whatsappService.getSession(device.code);
-    if (!session) {
-      throw new BadRequestError('Session tidak ditemukan untuk device ini');
-    }
-
     try {
-      // Import deleteSession from wa-multi-session
-      const { deleteSession } = await import('wa-multi-session');
-      
-      // Delete the session
-      await deleteSession(device.code);
-      console.log(`Session ${device.code} successfully deleted`);
-
-      // Update device status to disconnected
-      await this.prisma.device.update({
-        where: { id: deviceId },
-        data: { 
-          status: 'disconnected',
-          updated_at: new Date()
-        }
-      });
-
-      console.log(`Device ${device.code} status updated to disconnected`);
+      // Use WhatsApp service to disconnect the device
+      await whatsappService.disconnectDevice(device.code);
+      console.log(`Device ${device.code} successfully disconnected via WhatsApp service`);
     } catch (error) {
       console.error(`Failed to disconnect device ${device.code}:`, error);
       throw new InternalServerError('Gagal melakukan disconnect device');

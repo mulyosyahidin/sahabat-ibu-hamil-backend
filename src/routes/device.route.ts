@@ -49,12 +49,18 @@ router.delete('/:id', authMiddleware, deviceController.delete);
  * POST /devices/:id/request-connection
  * Request WhatsApp connection for device (requires authentication)
  */
-router.post('/:id/request-connection', authMiddleware, deviceController.requestConnection);
+router.post('/:deviceCode/request-connection', authMiddleware, deviceController.requestConnection);
 
 /**
  * POST /devices/:id/disconnect
  * Disconnect WhatsApp session for device (requires authentication)
  */
 router.post('/:id/disconnect', authMiddleware, deviceController.disconnect);
+
+/**
+ * POST /devices/:deviceCode/reconnect
+ * Reconnect WhatsApp session using existing session files (requires authentication)
+ */
+router.post('/:deviceCode/reconnect', authMiddleware, deviceController.reconnect);
 
 export default router;

@@ -205,18 +205,16 @@ export class DeviceController {
    * POST /devices/:id/request-connection
    */
   requestConnection = async (
-    req: Request<{ id: string }, unknown, unknown, ParsedQs>,
+    req: Request<{ deviceCode: string }, unknown, unknown, ParsedQs>,
     res: Response
   ): Promise<void> => {
     try {
-      const deviceId = parseInt(req.params.id);
-      
-      if (isNaN(deviceId)) {
-        res.status(400).json(ApiResponse.error('Invalid device ID'));
+      if (!req.params.deviceCode) {
+        res.status(400).json(ApiResponse.error('Device code is required'));
         return;
       }
       
-      await this.deviceService.requestDeviceConnection(deviceId);
+      await this.deviceService.requestDeviceConnection(req.params.deviceCode);
       
       res.json(ApiResponse.success('Request koneksi perangkat berhasil dikirim'));
     } catch (error) {
@@ -252,6 +250,35 @@ export class DeviceController {
       res.json(ApiResponse.success('Device berhasil didisconnect'));
     } catch (error) {
       console.error('Disconnect device error:', error);
+      
+      if (error instanceof AppError) {
+        res.status(error.statusCode).json(ApiResponse.error(error.message));
+        return;
+      }
+
+      res.status(500).json(ApiResponse.error('Internal server error'));
+    }
+  };
+
+  /**
+   * Reconnect device using existing session files
+   * POST /devices/:deviceCode/reconnect
+   */
+  reconnect = async (
+    req: Request<{ deviceCode: string }, unknown, unknown, ParsedQs>,
+    res: Response
+  ): Promise<void> => {
+    try {
+      if (!req.params.deviceCode) {
+        res.status(400).json(ApiResponse.error('Device code is required'));
+        return;
+      }
+      
+      await this.deviceService.reconnectDevice(req.params.deviceCode);
+      
+      res.json(ApiResponse.success('Device reconnection berhasil dimulai'));
+    } catch (error) {
+      console.error('Reconnect device error:', error);
       
       if (error instanceof AppError) {
         res.status(error.statusCode).json(ApiResponse.error(error.message));

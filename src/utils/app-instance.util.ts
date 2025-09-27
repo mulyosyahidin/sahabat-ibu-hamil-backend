@@ -1,5 +1,6 @@
 import { WhatsAppService } from '../services/whatsapp.service';
 import { DeviceService } from '../services/device.service';
+import { ChatService } from '../services/chat/chat.service';
 
 /**
  * Global app instance manager
@@ -9,6 +10,7 @@ class AppInstanceManager {
   private static instance: AppInstanceManager;
   private whatsappService: WhatsAppService | null = null;
   private deviceService: DeviceService | null = null;
+  private chatService: ChatService | null = null;
 
   private constructor() {}
 
@@ -65,6 +67,27 @@ class AppInstanceManager {
    */
   isDeviceServiceInitialized(): boolean {
     return this.deviceService !== null;
+  }
+
+  /**
+   * Set Chat service instance
+   */
+  setChatService(service: ChatService): void {
+    this.chatService = service;
+  }
+
+  /**
+   * Get Chat service instance
+   */
+  getChatService(): ChatService | null {
+    return this.chatService;
+  }
+
+  /**
+   * Check if Chat service is initialized
+   */
+  isChatServiceInitialized(): boolean {
+    return this.chatService !== null;
   }
 }
 

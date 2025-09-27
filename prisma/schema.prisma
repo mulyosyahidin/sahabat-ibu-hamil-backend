@@ -27,9 +27,14 @@ model Device {
   code         String         @unique @db.VarChar(20)
   status       devices_status @default(draft)
   phone_number String?        @db.VarChar(20)
+  device_id    String?
   created_at   DateTime       @default(now())
   updated_at   DateTime       @updatedAt
   deleted_at   DateTime?
+
+  // Relasi
+  chats        Chat[]
+  aiRequestLogs AiRequestLog[]
 
   @@map("devices")
 }
@@ -37,6 +42,262 @@ model Device {
 enum devices_status {
   draft
   pending_connect
+  failed_connect
   connected
   disconnected
+  reconnecting
+}
+
+enum MessageDirection {
+  in
+  out
+}
+
+enum MessageType {
+  text
+  image
+  audio
+  document
+  video
+  other
+}
+
+enum MessageContentSource {
+  system
+  model
+  user
+}
+
+enum ContentCategory {
+  ANEMIA
+  TTD
+  TIPS_GIZI
+  MITOS
+  SUAMI_KELUARGA
+  FAQ
+}
+
+model Chat {
+  id            Int      @id @default(autoincrement())
+
+  // FK ke devices
+  deviceId      Int
+  device        Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  waNumber      String
+  name          String?
+  age           Int?
+  consentAt     DateTime?
+
+  // State percakapan
+  sceneStack    Json     @default("[\"menu.root\"]")
+  ctx           Json     @default("{}")
+
+  lastActiveAt  DateTime? @db.Timestamp(3)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relasi
+  messages      Message[]
+  reminders     Reminder[]
+
+  @@index([waNumber])
+  @@unique([deviceId, waNumber]) // kunci unik per device
+  @@map("chats")
+}
+
+/**
+ * MESSAGE merefer ke Chat via chatId
+ */
+model Message {
+  id          Int              @id @default(autoincrement())
+  chatId      Int
+  chat        Chat             @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  source      MessageContentSource
+
+  direction   MessageDirection
+  type        MessageType      @default(text)
+  body        String? @db.Text
+  intentLabel String?
+  intentScore Float?
+  meta        Json?
+  createdAt   DateTime         @default(now())
+
+  @@index([chatId, createdAt])
+  @@map("messages")
+}
+
+/**
+ * REMINDER juga merefer ke Chat via chatId.
+ */
+model Reminder {
+  id             Int       @id @default(autoincrement())
+  chatId         Int
+  chat           Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  active         Boolean   @default(true)
+  timeOfDay      String?   // "pagi|siang|malam" atau "HH:MM"
+  tz             String    @default("Asia/Jakarta")
+  nextRunAt      DateTime?
+  lastRunAt      DateTime?
+  nextRunMessage String?   @db.Text // Message to be sent when reminder runs (not displayed to user)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([active, nextRunAt])
+  @@index([chatId])
+  @@map("reminders")
+}
+
+model Content {
+  id         Int              @id @default(autoincrement())
+  code       String           @unique
+  category   ContentCategory
+  title      String
+  bodyMd     String
+  tags       Json?
+  published  Boolean          @default(true)
+  order      Int?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@index([category, published])
+  @@map("contents")
+}
+
+model FaqIntent {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique          // e.g., "FAQ_TTD_CARA_MINUM"
+  title     String
+  samples   Json?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("faq_intents")
+}
+
+// ===== AI LOGGING TABLES =====
+
+enum AiRequestStatus {
+  pending
+  success
+  error
+  timeout
+  cancelled
+}
+
+enum AiModel {
+  gpt_4o_mini
+  gpt_4o
+  gpt_4_turbo
+  gpt_3_5_turbo
+  claude_3_5_sonnet
+  claude_3_haiku
+  gemini_pro
+  gemini_flash
+}
+
+enum AiEndpoint {
+  chat_completions_create
+  completions_create
+  embeddings_create
+  images_generate
+  audio_transcriptions_create
+  audio_translations_create
+  moderations_create
+}
+
+/**
+ * Tabel utama untuk logging semua request ke AI providers
+ */
+model AiRequestLog {
+  id                BigInt           @id @default(autoincrement())
+  
+  // Identifikasi request
+  sessionId         String?          @db.VarChar(255)
+  chatExternalId    String?          @db.VarChar(255)
+  deviceId          Int?
+  userId            Int?
+  
+  // Detail request
+  provider          String           @default("openai") @db.VarChar(50)
+  endpoint          AiEndpoint
+  model             AiModel
+  
+  // Payload dan response
+  requestPayload    Json
+  responsePayload   Json?
+  responseText      String?          @db.Text
+  
+  // Metrics
+  inputTokens       Int              @default(0)
+  outputTokens      Int              @default(0)
+  totalTokens       Int              @default(0)
+  
+  // Cost tracking (dalam USD)
+  inputCostUsd      Decimal          @default(0) @db.Decimal(10, 6)
+  outputCostUsd     Decimal          @default(0) @db.Decimal(10, 6)
+  totalCostUsd      Decimal          @default(0) @db.Decimal(10, 6)
+  
+  // Performance metrics
+  latencyMs         Int              @default(0)
+  retries           Int              @default(0)
+  
+  // Status dan error handling
+  status            AiRequestStatus  @default(pending)
+  errorMessage      String?          @db.Text
+  errorCode         String?          @db.VarChar(100)
+  
+  // Metadata
+  project           String?          @db.VarChar(100)
+  tags              Json?            // Array of strings
+  meta              Json?            // Additional metadata
+  
+  // Features used
+  responseFormat    String?          @db.VarChar(50)  // json, text, etc
+  stream            Boolean          @default(false)
+  toolCallingUsed   Boolean          @default(false)
+  promptCachingUsed Boolean          @default(false)
+  
+  // Timestamps
+  requestedAt       DateTime         @default(now())
+  respondedAt       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  // Relations
+  device            Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  responseChunks    AiResponseChunk[]
+  
+  @@index([sessionId])
+  @@index([chatExternalId])
+  @@index([deviceId])
+  @@index([provider, model])
+  @@index([status])
+  @@index([requestedAt])
+  @@index([project])
+  @@map("ai_request_logs")
+}
+
+/**
+ * Tabel untuk menyimpan streaming response chunks
+ */
+model AiResponseChunk {
+  id            BigInt        @id @default(autoincrement())
+  requestLogId  BigInt
+  requestLog    AiRequestLog  @relation(fields: [requestLogId], references: [id], onDelete: Cascade)
+  
+  chunkIndex    Int
+  content       String        @db.Text
+  finishReason  String?       @db.VarChar(50)
+  
+  // Token info per chunk
+  tokens        Int           @default(0)
+  
+  createdAt     DateTime      @default(now())
+  
+  @@index([requestLogId, chunkIndex])
+  @@map("ai_response_chunks")
 }

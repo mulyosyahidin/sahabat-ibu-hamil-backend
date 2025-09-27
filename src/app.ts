@@ -7,10 +7,21 @@
 
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import router from './routes/router';
 import { WhatsAppService } from './services/whatsapp.service';
+import { ChatService } from './services/chat/chat.service';
+import { DeviceService } from './services/device.service';
+import { SocketService } from './services/socket.service';
+import { PrismaClient } from './generated/prisma';
+import { appInstanceManager } from './utils/app-instance.util';
+
+// ES module equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Initialize application middleware
@@ -40,6 +51,9 @@ const initializeMiddlewares = (app: express.Application): void => {
 
   app.use(cors(corsOptions));
   app.use(express.json());
+  
+  // Serve static files from public directory
+  app.use('/public', express.static(path.join(__dirname, '../public')));
 };
 
 /**
@@ -64,11 +78,13 @@ export const createApp = (port: number = 3000): {
   server: any;
   io: SocketIOServer;
   whatsappService: WhatsAppService;
+  socketService: SocketService;
   port: number;
   getApp: () => express.Application;
   getServer: () => any;
   getIO: () => SocketIOServer;
   getWhatsAppService: () => WhatsAppService;
+  getSocketService: () => SocketService;
   listen: () => void;
   getPort: () => number;
 } => {
@@ -95,39 +111,69 @@ export const createApp = (port: number = 3000): {
     }
   });
 
-  // Initialize WhatsApp service with Socket.IO
-  const whatsappService = new WhatsAppService(io);
+  // Initialize services
+  const prisma = new PrismaClient();
+  const socketService = new SocketService(io);
+  const whatsappService = new WhatsAppService(io, prisma);
+  const deviceService = new DeviceService(prisma);
+  const chatService = new ChatService(prisma, whatsappService);
   
-  // Load existing WhatsApp sessions from storage
-  whatsappService.loadSessionsFromStorage();
+  // Set services in app instance manager
+  appInstanceManager.setWhatsAppService(whatsappService);
+  appInstanceManager.setDeviceService(deviceService);
+  appInstanceManager.setChatService(chatService);
   
   // Set up middleware and routes
   initializeMiddlewares(app);
   initializeRoutes(app);
-
+  
   // Socket.IO connection handling
   io.on('connection', (socket) => {
-    console.log(`Client connected: ${socket.id}`);
+    console.log(`🔌 Socket client connected: ${socket.id}`);
     
-    socket.on('disconnect', () => {
-      console.log(`Client disconnected: ${socket.id}`);
+    socket.on('join-device-room', (data: { deviceCode: string }) => {
+      const { deviceCode } = data;
+      const roomName = `device-${deviceCode}`;
+      
+      console.log(`📱 Client ${socket.id} joining device room: ${roomName}`);
+      
+      // Join the device-specific room
+      socket.join(roomName);
+      
+      // Confirm room join to client
+      socket.emit('device-room-joined', {
+        deviceCode,
+        roomName,
+        socketId: socket.id,
+        timestamp: new Date().toISOString()
+      });
+      
+      console.log(`✅ Client ${socket.id} successfully joined room: ${roomName}`);
     });
     
-    // Handle client requesting device connection
-    socket.on('request-device-connection', async (data) => {
-      try {
-        const { deviceId } = data;
-        if (!deviceId) {
-          socket.emit('error', { message: 'Device ID is required' });
-          return;
-        }
-        
-        await whatsappService.requestDeviceConnection(deviceId);
-      } catch (error) {
-        socket.emit('error', { 
-          message: error instanceof Error ? error.message : 'Unknown error' 
-        });
-      }
+    // Handle leave device room
+    socket.on('leave-device-room', (data: { deviceCode: string }) => {
+      const { deviceCode } = data;
+      const roomName = `device-${deviceCode}`;
+      
+      console.log(`📱 Client ${socket.id} leaving device room: ${roomName}`);
+      
+      // Leave the device-specific room
+      socket.leave(roomName);
+      
+      // Confirm room leave to client
+      socket.emit('device-room-left', {
+        deviceCode,
+        roomName,
+        socketId: socket.id,
+        timestamp: new Date().toISOString()
+      });
+      
+      console.log(`✅ Client ${socket.id} successfully left room: ${roomName}`);
+    });
+    
+    socket.on('disconnect', (reason) => {
+      console.log(`🔌 Socket client disconnected: ${socket.id} (${reason})`);
     });
   });
 
@@ -136,6 +182,7 @@ export const createApp = (port: number = 3000): {
     server,
     io,
     whatsappService,
+    socketService,
     port,
     /**
      * Get the Express application instance
@@ -158,14 +205,28 @@ export const createApp = (port: number = 3000): {
      */
     getWhatsAppService: (): WhatsAppService => whatsappService,
     /**
+     * Get the Socket service instance
+     * @returns Socket service
+     */
+    getSocketService: (): SocketService => socketService,
+    /**
      * Start the HTTP server with Socket.IO
      * Begins listening on the configured port
      */
     listen: (): void => {
-      server.listen(port, (): void => {
+      server.listen(port, async (): Promise<void> => {
         // eslint-disable-next-line no-console
         console.log(`Server is running on port ${port}`);
         console.log(`Socket.IO server is ready for connections`);
+        
+        // Initialize WhatsApp sessions from storage
+        try {
+          console.log('🔄 Initializing WhatsApp sessions...');
+          await whatsappService.loadExistingSessions();
+          console.log('✅ WhatsApp sessions initialization completed');
+        } catch (error) {
+          console.error('❌ Failed to initialize WhatsApp sessions:', error);
+        }
       });
     },
     /**

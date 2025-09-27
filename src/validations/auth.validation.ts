@@ -20,7 +20,7 @@ export const loginValidationSchema = z.object({
     .string({ message: "Email tidak boleh kosong" })
     .trim()
     .min(12, { message: "Email minimal 12 karakter" })
-    .pipe(z.email({ message: "Email tidak valid" })),
+    .email({ message: "Email tidak valid" }),
   
   password: z
     .string({
