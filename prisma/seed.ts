@@ -25,14 +25,14 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting database seeding...');
 
-  // Default user data from environment variables
+  // Validate required environment variables and provide fallbacks
   const defaultUser = {
-    name: process.env.DEFAULT_USER_NAME || 'Admin User',
-    email: process.env.DEFAULT_USER_EMAIL || 'admin@sahabatibuhamil.com',
-    password: process.env.DEFAULT_USER_PASSWORD || 'password123',
+    name: process.env.DEFAULT_USER_NAME || '',
+    email: process.env.DEFAULT_USER_EMAIL || '',
+    password: process.env.DEFAULT_USER_PASSWORD || '',
   };
 
-  // Validate required environment variables
+  // Warn if using fallback values
   if (!process.env.DEFAULT_USER_NAME || !process.env.DEFAULT_USER_EMAIL || !process.env.DEFAULT_USER_PASSWORD) {
     console.warn('⚠️  Warning: Some default user environment variables are missing. Using fallback values.');
     console.warn('   Please set DEFAULT_USER_NAME, DEFAULT_USER_EMAIL, and DEFAULT_USER_PASSWORD in your .env file.');

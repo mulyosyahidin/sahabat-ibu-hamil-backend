@@ -1,13 +1,11 @@
-// src/utils/runIfOpenAIEnabled.ts
+import { openaiConfig } from "@/config/openai";
+
 export async function runIfOpenAIEnabled<T>(
   cb: () => Promise<T>,
   fallback: () => T | Promise<T>,
   opts?: { envVar?: string; onErrorReturnFallback?: boolean }
 ): Promise<T> {
-  const envVar = opts?.envVar ?? "ENABLE_OPEN_AI";
-  const enabled = process.env[envVar] === "true";
-
-  if (!enabled) return await fallback();
+  if (!openaiConfig.enabled) return await fallback();
 
   try {
     return await cb();

@@ -8,13 +8,13 @@
  * @version 1.0.0
  */
 
-import { PrismaClient } from '../generated/prisma';
+import { PrismaClient, DeviceStatus } from '../generated/prisma';
 import type { CreateDeviceRequest, UpdateDeviceRequest } from '../models/requests/device.request';
-import type { DeviceDto } from '../models/dto/device.dto';
 import { NotFoundError, BadRequestError, InternalServerError } from '../utils/error.util';
 import { generateDeviceCode } from '../utils/code.util';
 import { PaginatedResponseHelper, type PaginatedResponse } from '../models/responses/paginated.response';
 import { appInstanceManager } from '../utils/app-instance.util';
+import { type DeviceDto } from '../models/dto';
 
 export class DeviceService {
   private prisma: PrismaClient;
@@ -22,22 +22,7 @@ export class DeviceService {
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
   }
-
-  /**
-   * Reconnect device using existing session files
-   * @param deviceCode - Device code to reconnect
-   */
-  async reconnectDevice(deviceCode: string): Promise<void> {
-    // Get WhatsApp service instance
-    const whatsappService = appInstanceManager.getWhatsAppService();
-    if (!whatsappService) {
-      throw new InternalServerError('WhatsApp service tidak tersedia');
-    }
-
-    // Use WhatsApp service reconnect method
-    await whatsappService.reconnectDevice(deviceCode);
-  }
-
+  
   /**
    * Create a new device
    */
@@ -68,7 +53,7 @@ export class DeviceService {
       data: {
         name: data.name,
         code: deviceCode,
-        status: 'draft', 
+        status: DeviceStatus.DRAFT,
       }
     });
 
@@ -251,7 +236,7 @@ export class DeviceService {
 
     try {
       // Use WhatsApp service to disconnect the device
-      if (device.status == 'connected') {
+      if (device.status == DeviceStatus.CONNECTED) {
         await whatsappService.disconnectDevice(device.code);
       }
       console.log(`Device ${device.code} successfully disconnected via WhatsApp service`);
@@ -288,7 +273,7 @@ export class DeviceService {
     }
 
     // Check if device status is connected
-    if (device.status !== 'connected') {
+    if (device.status !== DeviceStatus.CONNECTED) {
       throw new BadRequestError('Device tidak dalam status connected');
     }
 

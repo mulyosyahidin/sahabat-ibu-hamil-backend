@@ -8,16 +8,7 @@
  * @version 1.0.0
  */
 
-import type { devices_status } from "@/generated/prisma";
-
-export enum DeviceStatus {
-  Draft = 'draft',
-  PendingConnect = 'pending_connect',
-  Connected = 'connected',
-  Disconnected = 'disconnected',
-  Reconnecting = 'reconnecting',
-  FailedConnect = 'failed_connect',
-}
+import type { DeviceStatus } from "../../generated/prisma";
 
 /**
  * Device DTO - represents the device entity structure
@@ -26,7 +17,7 @@ export interface DeviceDto {
   id: number;
   name: string;
   code: string;
-  status: devices_status;
+  status: DeviceStatus;
   phone_number: string | null;
   device_id: string | null;
   created_at: Date;

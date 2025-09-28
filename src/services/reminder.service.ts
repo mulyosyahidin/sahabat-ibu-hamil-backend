@@ -152,11 +152,11 @@ export class ReminderService {
   async getChatReminders(chatId: number): Promise<Reminder[]> {
     return await this.prisma.reminder.findMany({
       where: {
-        chatId,
+        chat_id: chatId,
         active: true
       },
       orderBy: {
-        createdAt: 'desc'
+        created_at: 'desc'
       }
     });
   }
@@ -167,10 +167,10 @@ export class ReminderService {
   async getAllChatReminders(chatId: number): Promise<Reminder[]> {
     return await this.prisma.reminder.findMany({
       where: {
-        chatId
+        chat_id: chatId
       },
       orderBy: {
-        createdAt: 'desc'
+        created_at: 'desc'
       }
     });
   }
@@ -181,7 +181,7 @@ export class ReminderService {
   async getChatReminderCount(chatId: number): Promise<number> {
     return await this.prisma.reminder.count({
       where: {
-        chatId,
+        chat_id: chatId,
         active: true
       }
     });
@@ -263,11 +263,11 @@ export class ReminderService {
     
     return await this.prisma.reminder.create({
       data: {
-        chatId,
-        timeOfDay: timeOfDay || null,
+        chat_id: chatId,
+        time_of_day: timeOfDay || null,
         active: true,
-        nextRunAt,
-        nextRunMessage
+        next_run_at: nextRunAt,
+        next_run_message: nextRunMessage
       }
     });
   }
@@ -288,7 +288,7 @@ export class ReminderService {
   async updateNextRunAt(reminderId: number, nextRunAt: Date): Promise<Reminder> {
     return await this.prisma.reminder.update({
       where: { id: reminderId },
-      data: { nextRunAt }
+      data: { next_run_at: nextRunAt }
     });
   }
 
@@ -333,14 +333,14 @@ export class ReminderService {
     let text = '📝 *Jadwal Reminder Saya*\n\n';
     
     reminders.forEach((reminder, index) => {
-      const timeDisplay = this.formatReminderTime(reminder.timeOfDay);
+      const timeDisplay = this.formatReminderTime(reminder.time_of_day);
       const status = reminder.active ? '✅ Aktif' : '❌ Nonaktif';
       
       text += `${index + 1}. ${timeDisplay}\n`;
       text += `   Status: ${status}\n`;
       
-      if (reminder.nextRunAt) {
-        const nextRun = new Date(reminder.nextRunAt).toLocaleString('id-ID', {
+      if (reminder.next_run_at) {
+        const nextRun = new Date(reminder.next_run_at).toLocaleString('id-ID', {
           timeZone: reminder.tz,
           dateStyle: 'short',
           timeStyle: 'short'
@@ -372,8 +372,8 @@ export class ReminderService {
   async hasReminderForTimeSlot(chatId: number, timeSlot: TimeSlot): Promise<boolean> {
     const count = await this.prisma.reminder.count({
       where: {
-        chatId,
-        timeOfDay: timeSlot,
+        chat_id: chatId,
+        time_of_day: timeSlot,
         active: true
       }
     });
@@ -391,8 +391,8 @@ export class ReminderService {
     };
     
     reminders.forEach(reminder => {
-      if (reminder.timeOfDay && grouped[reminder.timeOfDay]) {
-        grouped[reminder.timeOfDay]!.push(reminder);
+      if (reminder.time_of_day && grouped[reminder.time_of_day]) {
+        grouped[reminder.time_of_day]!.push(reminder);
       }
     });
     
@@ -428,8 +428,8 @@ export class ReminderService {
     // Check if there's an inactive reminder for this time slot
     const inactiveReminder = await this.prisma.reminder.findFirst({
       where: {
-        chatId,
-        timeOfDay: timeSlot,
+        chat_id: chatId,
+        time_of_day: timeSlot,
         active: false
       }
     });
@@ -443,9 +443,9 @@ export class ReminderService {
         where: { id: inactiveReminder.id },
         data: { 
           active: true,
-          nextRunAt,
-          nextRunMessage,
-          updatedAt: new Date()
+          next_run_at: nextRunAt,
+          next_run_message: nextRunMessage,
+          updated_at: new Date()
         }
       });
     }
@@ -591,7 +591,7 @@ export class ReminderService {
     await this.prisma.reminder.updateMany({
       where: {
         id: { in: reminderIds },
-        chatId: chatId
+        chat_id: chatId,
       },
       data: {
         active: false

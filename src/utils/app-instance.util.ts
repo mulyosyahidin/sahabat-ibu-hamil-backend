@@ -1,6 +1,6 @@
 import { WhatsAppService } from '../services/whatsapp.service';
 import { DeviceService } from '../services/device.service';
-import { ChatService } from '../services/chat/chat.service';
+import { ChatService } from '../services/chat.service';
 
 /**
  * Global app instance manager

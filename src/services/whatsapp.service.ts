@@ -9,94 +9,26 @@ import path from 'path';
 import fs from 'fs';
 import type { PrismaClient } from '@prisma/client';
 import { NotFoundError } from '@/utils';
+import { ChatService } from './chat.service';
+import { DeviceStatus } from '../generated/prisma';
 
 export class WhatsAppService {
   private io: SocketIOServer;
   private sessions: Map<string, WASocket> = new Map();
   private sessionsDir: string;
   private prisma: PrismaClient;
+  private chatService: ChatService;
 
   constructor(io: SocketIOServer, prisma: PrismaClient) {
     this.io = io;
     this.sessionsDir = path.join(process.cwd(), 'sessions');
     this.prisma = prisma;
+    this.chatService = new ChatService(prisma, this);
 
     // Create sessions directory if it doesn't exist
     if (!fs.existsSync(this.sessionsDir)) {
       fs.mkdirSync(this.sessionsDir, { recursive: true });
     }
-  }
-
-  /**
-   * Reconnect device using existing session files
-   * @param deviceCode - Kode device yang akan direconnect
-   */
-  async reconnectDevice(deviceCode: string): Promise<void> {
-    // try {
-    //   console.log(`🔄 Attempting to reconnect device: ${deviceCode}`);
-
-    //   // Check if device exists in database
-    //   const device = await this.prisma.device.findUnique({
-    //     where: { code: deviceCode }
-    //   });
-
-    //   if (!device) {
-    //     throw new NotFoundError(`Device with code ${deviceCode} not found`);
-    //   }
-
-    //   // Check if session files exist
-    //   const sessionPath = path.join(this.sessionsDir, deviceCode);
-    //   if (!fs.existsSync(sessionPath)) {
-    //     throw new NotFoundError(`No session files found for device ${deviceCode}. Please scan QR code again.`);
-    //   }
-
-    //   // Check if session is already active
-    //   if (this.sessions.has(deviceCode)) {
-    //     console.log(`⚠️ Session for device ${deviceCode} is already active`);
-    //     return;
-    //   }
-
-    //   // Emit reconnection started event
-    //   this.emitToDeviceRoom(deviceCode, 'connection-status', {
-    //     deviceCode,
-    //     status: 'reconnecting',
-    //     message: 'Mencoba menghubungkan kembali menggunakan session yang tersimpan...',
-    //     timestamp: new Date().toISOString()
-    //   });
-
-    //   // Update device status to connecting
-    //   await this.prisma.device.update({
-    //     where: {
-    //       code: deviceCode,
-    //     },
-    //     data: {
-    //       status: 'reconnecting',
-    //     }
-    //   });
-
-    //   // Start session using existing files
-    //   // await this.startSession(deviceCode);
-
-    //   console.log(`✅ Reconnection initiated for device: ${deviceCode}`);
-
-    // } catch (error) {
-    //   console.error(`❌ Failed to reconnect device ${deviceCode}:`, error);
-
-    //   // Emit error event
-    //   this.emitToDeviceRoom(deviceCode, 'connection-error', {
-    //     deviceCode,
-    //     error: error instanceof Error ? error.message : 'Reconnection failed',
-    //     timestamp: new Date().toISOString()
-    //   });
-
-    //   // Update device status back to disconnected
-    //   await this.prisma.device.update({
-    //     where: { code: deviceCode },
-    //     data: { status: 'disconnected' }
-    //   });
-
-    //   throw error;
-    // }
   }
 
   /**
@@ -221,7 +153,7 @@ export class WhatsAppService {
                 code: deviceCode
               },
               data: {
-                status: 'disconnected',
+                status: DeviceStatus.DISCONNECTED,
               }
             });
 
@@ -245,7 +177,7 @@ export class WhatsAppService {
               code: deviceCode
             },
             data: {
-              status: 'connected',
+              status: DeviceStatus.CONNECTED,
               phone_number: phoneNumber,
               device_id: userInfo?.id,
             }
@@ -275,13 +207,22 @@ export class WhatsAppService {
               code: deviceCode,
             },
             data: {
-              status: 'pending_connect',
+              status: DeviceStatus.PENDING_CONNECT,
             }
           });
         }
       });
 
       sock.ev.on('creds.update', saveCreds);
+
+      // Handle incoming messages
+      sock.ev.on('messages.upsert', async (m) => {
+        const messages = m.messages;
+        for (const message of messages) {
+          await this.chatService.handleIncomingMessage(deviceCode, message);
+        }
+      });
+
       console.log(`✅ WhatsApp session initialized for device: ${deviceCode}`);
     }
     catch (error) {
@@ -420,7 +361,7 @@ export class WhatsAppService {
         await this.prisma.device.update({
           where: { code: deviceCode },
           data: {
-            status: 'disconnected',
+            status: DeviceStatus.DISCONNECTED,
             updated_at: new Date()
           }
         });
@@ -440,6 +381,163 @@ export class WhatsAppService {
       });
 
       throw error;
+    }
+  }
+
+  /**
+   * Send text message via WhatsApp
+   * @param deviceCode - Kode device yang akan mengirim pesan
+   * @param phoneNumber - Nomor telepon tujuan (format: 62xxx)
+   * @param text - Teks pesan yang akan dikirim
+   */
+  async sendTextMessage(deviceCode: string, phoneNumber: string, text: string): Promise<void> {
+    try {
+      console.log(`📤 Sending text message from device ${deviceCode} to ${phoneNumber}`);
+
+      // Get active session for the device
+      const session = this.getSession(deviceCode);
+      if (!session) {
+        throw new NotFoundError(`No active session found for device: ${deviceCode}`);
+      }
+
+      // Format phone number for WhatsApp (add @s.whatsapp.net)
+      const formattedNumber = `${phoneNumber}@s.whatsapp.net`;
+
+      // Send text message
+      await session.sendMessage(formattedNumber, { text });
+
+      console.log(`✅ Text message sent successfully from device ${deviceCode} to ${phoneNumber}`);
+    } catch (error) {
+      console.error(`❌ Failed to send text message from device ${deviceCode} to ${phoneNumber}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send image message via WhatsApp
+   * @param deviceCode - Kode device yang akan mengirim pesan
+   * @param phoneNumber - Nomor telepon tujuan (format: 62xxx)
+   * @param caption - Caption untuk gambar
+   * @param media - Buffer atau string path gambar
+   */
+  async sendImageMessage(deviceCode: string, phoneNumber: string, caption: string, media: Buffer | string): Promise<void> {
+    try {
+      console.log(`📤 Sending image message from device ${deviceCode} to ${phoneNumber}`);
+
+      // Get active session for the device
+      const session = this.getSession(deviceCode);
+      if (!session) {
+        throw new NotFoundError(`No active session found for device: ${deviceCode}`);
+      }
+
+      // Format phone number for WhatsApp (add @s.whatsapp.net)
+      const formattedNumber = `${phoneNumber}@s.whatsapp.net`;
+
+      // Prepare media for WAMediaUpload format
+      let imageMedia;
+      if (Buffer.isBuffer(media)) {
+        // If media is Buffer, use it directly
+        imageMedia = media;
+      } else {
+        // If media is string (URL or path), wrap it in WAMediaPayloadURL format
+        imageMedia = { url: media };
+      }
+
+      // Send image message
+      await session.sendMessage(formattedNumber, {
+        image: imageMedia,
+        caption: caption
+      });
+
+      console.log(`✅ Image message sent successfully from device ${deviceCode} to ${phoneNumber}`);
+    } catch (error) {
+      console.error(`❌ Failed to send image message from device ${deviceCode} to ${phoneNumber}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send YouTube video link with thumbnail via WhatsApp
+   * @param deviceCode - Kode device yang akan mengirim pesan
+   * @param phoneNumber - Nomor telepon tujuan (format: 62xxx)
+   * @param caption - Caption untuk video
+   * @param youtubeUrl - URL YouTube video
+   */
+  async sendVideoMessage(deviceCode: string, phoneNumber: string, caption: string, youtubeUrl: string): Promise<void> {
+    try {
+      console.log(`📤 Sending YouTube video link from device ${deviceCode} to ${phoneNumber}`);
+
+      // Get active session for the device
+      const session = this.getSession(deviceCode);
+      if (!session) {
+        throw new NotFoundError(`No active session found for device: ${deviceCode}`);
+      }
+
+      // Format phone number for WhatsApp (add @s.whatsapp.net)
+      const formattedNumber = `${phoneNumber}@s.whatsapp.net`;
+
+      // Extract YouTube video ID from URL
+      const videoId = this.extractYouTubeVideoId(youtubeUrl);
+      if (!videoId) {
+        throw new Error('Invalid YouTube URL provided');
+      }
+
+      // Get YouTube thumbnail URL (high quality)
+      const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+
+      // Send message with YouTube link and thumbnail
+      await session.sendMessage(formattedNumber, {
+        text: `${caption}\n\n🎥 *Video YouTube:*\n${youtubeUrl}`,
+        linkPreview: {
+          title: caption,
+          description: 'Video YouTube',
+          jpegThumbnail: await this.fetchYouTubeThumbnail(thumbnailUrl),
+          "canonical-url": youtubeUrl,
+          "matched-text": youtubeUrl
+        }
+      });
+
+      console.log(`✅ YouTube video link sent successfully from device ${deviceCode} to ${phoneNumber}`);
+    } catch (error) {
+      console.error(`❌ Failed to send YouTube video link from device ${deviceCode} to ${phoneNumber}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Extract YouTube video ID from URL
+   * @param url - YouTube URL
+   * @returns Video ID or null if invalid
+   */
+  private extractYouTubeVideoId(url: string): string | null {
+    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+    const match = url.match(regex);
+    
+    return match && match[1] ? match[1] : null;
+  }
+
+  /**
+   * Fetch YouTube thumbnail as Buffer
+   * @param thumbnailUrl - YouTube thumbnail URL
+   * @returns Buffer of thumbnail image
+   */
+  private async fetchYouTubeThumbnail(thumbnailUrl: string): Promise<Buffer> {
+    try {
+      const response = await fetch(thumbnailUrl);
+      if (!response.ok) {
+        // Fallback to default quality thumbnail
+        const fallbackUrl = thumbnailUrl.replace('maxresdefault', 'hqdefault');
+        const fallbackResponse = await fetch(fallbackUrl);
+        if (!fallbackResponse.ok) {
+          throw new Error('Failed to fetch YouTube thumbnail');
+        }
+        return Buffer.from(await fallbackResponse.arrayBuffer());
+      }
+      return Buffer.from(await response.arrayBuffer());
+    } catch (error) {
+      console.error('Error fetching YouTube thumbnail:', error);
+      // Return empty buffer if thumbnail fetch fails
+      return Buffer.alloc(0);
     }
   }
 

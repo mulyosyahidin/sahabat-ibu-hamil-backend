@@ -8,8 +8,6 @@
  * @version 1.0.0
  */
 
-import { DeviceStatus } from '../dto/device.dto';
-
 /**
  * Create Device Request - represents the structure for creating a new device
  */

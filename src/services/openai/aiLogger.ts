@@ -2,10 +2,8 @@ import { PrismaClient, AiRequestStatus, AiModel, AiEndpoint } from "../../genera
 import { aiPricing } from "../../config/aiPricing";
 
 export interface LogRequestParams {
-  sessionId?: string | undefined;
-  chatExternalId?: string | undefined;
-  deviceId?: string | undefined;
-  userId?: string | undefined;
+  chatId?: number | undefined;
+  deviceId?: number | undefined;
   provider?: string | undefined;
   endpoint: string;
   model: string;
@@ -51,12 +49,10 @@ export class AiLogger {
   /**
    * Log AI request and return request log ID
    */
-  async logRequest(params: LogRequestParams): Promise<string> {
+  async logRequest(params: LogRequestParams): Promise<number> {
     const {
-      sessionId,
-      chatExternalId,
+      chatId,
       deviceId,
-      userId,
       provider = "openai",
       endpoint,
       model,
@@ -74,33 +70,31 @@ export class AiLogger {
 
     const requestLog = await this.prisma.aiRequestLog.create({
       data: {
-        sessionId: sessionId || null,
-        chatExternalId: chatExternalId || null,
-        deviceId: deviceId ? parseInt(deviceId) : null,
-        userId: userId ? parseInt(userId) : null,
+        chat_id: chatId || null,
+        device_id: deviceId || null,
         provider,
         endpoint: mappedEndpoint,
         model: mappedModel,
-        requestPayload,
-        responseFormat: responseFormat || null,
+        request_payload: requestPayload,
+        response_format: responseFormat || null,
         stream,
-        toolCallingUsed,
-        promptCachingUsed,
+        tool_calling_used: toolCallingUsed,
+        prompt_caching_used: promptCachingUsed,
         project: this.project,
         tags: this.tags,
         meta: meta || null,
-        status: "pending",
-        requestedAt: new Date()
+        status: AiRequestStatus.PENDING,
+        requested_at: new Date()
       }
     });
 
-    return requestLog.id.toString();
+    return Number(requestLog.id);
   }
 
   /**
    * Log AI response and calculate costs
    */
-  async logResponse(requestLogId: string, params: LogResponseParams): Promise<void> {
+  async logResponse(requestLogId: number, params: LogResponseParams): Promise<void> {
     const {
       responsePayload,
       responseText,
@@ -127,23 +121,23 @@ export class AiLogger {
     const costs = this.calculateCosts(requestLog.model, inputTokens, outputTokens);
 
     await this.prisma.aiRequestLog.update({
-      where: { id: BigInt(requestLogId) },
+      where: { id: requestLogId },
       data: {
-        responsePayload,
-        responseText: responseText || null,
-        inputTokens,
-        outputTokens,
-        totalTokens,
-        inputCostUsd: costs.inputCostUsd,
-        outputCostUsd: costs.outputCostUsd,
-        totalCostUsd: costs.totalCostUsd,
-        latencyMs,
+        response_payload: responsePayload ? responsePayload : null,
+        response_text: responseText || null,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        total_tokens: totalTokens,
+        input_cost_usd: costs.inputCostUsd,
+        output_cost_usd: costs.outputCostUsd,
+        total_cost_usd: costs.totalCostUsd,
+        latency_ms: latencyMs,
         status,
-        errorMessage: errorMessage || null,
-        errorCode: errorCode || null,
+        error_message: errorMessage || null,
+        error_code: errorCode || null,
         meta: meta ? { ...requestLog.meta as any, ...meta } : requestLog.meta,
-        respondedAt: new Date(),
-        updatedAt: new Date()
+        responded_at: new Date(),
+        updated_at: new Date()
       }
     });
 
@@ -158,10 +152,10 @@ export class AiLogger {
 
     await this.prisma.aiResponseChunk.create({
       data: {
-        requestLogId: BigInt(requestLogId),
-        chunkIndex,
+        request_log_id: BigInt(requestLogId),
+        chunk_index: chunkIndex,
         content,
-        finishReason: finishReason || null,
+        finish_reason: finishReason || null,
         tokens
       }
     });
@@ -170,14 +164,14 @@ export class AiLogger {
   /**
    * Get logs for a specific session
    */
-  async getSessionLogs(sessionId: string, limit = 50) {
+  async getChatLogs(chatId: number, limit = 50) {
     return await this.prisma.aiRequestLog.findMany({
-      where: { sessionId },
-      orderBy: { requestedAt: "desc" },
+      where: { chat_id: chatId },
+      orderBy: { requested_at: "desc" },
       take: limit,
       include: {
-        responseChunks: {
-          orderBy: { chunkIndex: "asc" }
+        response_chunks: {
+          orderBy: { chunk_index: "asc" }
         }
       }
     });
@@ -214,16 +208,16 @@ export class AiLogger {
    */
   private mapEndpoint(endpoint: string): AiEndpoint {
     const mapping: Record<string, AiEndpoint> = {
-      "chat/completions": "chat_completions_create",
-      "completions": "completions_create",
-      "embeddings": "embeddings_create",
-      "images/generations": "images_generate",
-      "audio/transcriptions": "audio_transcriptions_create",
-      "audio/translations": "audio_translations_create",
-      "moderations": "moderations_create"
+      "chat/completions": "CHAT_COMPLETIONS_CREATE",
+      "completions": "COMPLETIONS_CREATE",
+      "embeddings": "EMBEDDINGS_CREATE",
+      "images/generations": "IMAGES_GENERATE",
+      "audio/transcriptions": "AUDIO_TRANSCRIPTIONS_CREATE",
+      "audio/translations": "AUDIO_TRANSLATIONS_CREATE",
+      "moderations": "MODERATIONS_CREATE"
     };
 
-    return mapping[endpoint] || "chat_completions_create";
+    return mapping[endpoint] || "CHAT_COMPLETIONS_CREATE";
   }
 
   /**
@@ -231,16 +225,16 @@ export class AiLogger {
    */
   private mapModel(model: string): AiModel {
     const mapping: Record<string, AiModel> = {
-      "gpt-4o-mini": "gpt_4o_mini",
-      "gpt-4o": "gpt_4o",
-      "gpt-4-turbo": "gpt_4_turbo",
-      "gpt-3.5-turbo": "gpt_3_5_turbo",
-      "claude-3-5-sonnet": "claude_3_5_sonnet",
-      "claude-3-haiku": "claude_3_haiku",
-      "gemini-pro": "gemini_pro",
-      "gemini-1.5-flash": "gemini_flash"
+      "gpt-4o-mini": "GPT_4O_MINI",
+      "gpt-4o": "GPT_4O",
+      "gpt-4-turbo": "GPT_4_TURBO",
+      "gpt-3.5-turbo": "GPT_3_5_TURBO",
+      "claude-3-5-sonnet": "CLAUDE_3_5_SONNET",
+      "claude-3-haiku": "CLAUDE_3_HAIKU",
+      "gemini-pro": "GEMINI_PRO",
+      "gemini-1.5-flash": "GEMINI_FLASH"
     };
 
-    return mapping[model] || "gpt_4o_mini";
+    return mapping[model] || "GPT_4O_MINI";
   }
 }

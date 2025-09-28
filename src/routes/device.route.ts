@@ -57,10 +57,4 @@ router.post('/:deviceCode/request-connection', authMiddleware, deviceController.
  */
 router.post('/:id/disconnect', authMiddleware, deviceController.disconnect);
 
-/**
- * POST /devices/:deviceCode/reconnect
- * Reconnect WhatsApp session using existing session files (requires authentication)
- */
-router.post('/:deviceCode/reconnect', authMiddleware, deviceController.reconnect);
-
 export default router;

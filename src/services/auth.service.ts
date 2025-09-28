@@ -44,8 +44,13 @@ export class AuthService {
       throw new UnauthorizedError('Email atau password salah!');
     }
 
-    // Generate remember token
-    const rememberToken = crypto.randomBytes(32).toString('hex');
+    // Generate remember token (16 characters with mixed case, numbers, and symbols)
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    let rememberToken = '';
+    for (let i = 0; i < 16; i++) {
+      const randomIndex = crypto.randomInt(0, chars.length);
+      rememberToken += chars[randomIndex];
+    }
 
     // Update user with remember token
     await this.prisma.user.update({

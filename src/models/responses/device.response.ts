@@ -8,8 +8,8 @@
  * @version 1.0.0
  */
 
+import type { DeviceDto } from '../dto';
 import type { BaseResponse } from './base.response';
-import type { DeviceDto } from '../dto/device.dto';
 import type { PaginatedResponse } from './paginated.response';
 
 /**

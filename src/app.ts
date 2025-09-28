@@ -13,7 +13,7 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import router from './routes/router';
 import { WhatsAppService } from './services/whatsapp.service';
-import { ChatService } from './services/chat/chat.service';
+import { ChatService } from './services/chat.service';
 import { DeviceService } from './services/device.service';
 import { SocketService } from './services/socket.service';
 import { PrismaClient } from './generated/prisma';
