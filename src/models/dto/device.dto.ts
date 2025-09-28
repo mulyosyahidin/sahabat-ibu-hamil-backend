@@ -8,7 +8,7 @@
  * @version 1.0.0
  */
 
-import type { DeviceStatus } from "../../generated/prisma";
+import type { Device, DeviceStatus } from "@/generated/prisma";
 
 /**
  * Device DTO - represents the device entity structure

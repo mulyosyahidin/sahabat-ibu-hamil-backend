@@ -9,10 +9,9 @@
  */
 
 import type { Request, Response, NextFunction } from 'express';
-import { extractTokenFromHeader, verifyToken, type JwtPayload } from '../utils/jwt.util';
+import { extractTokenFromHeader, verifyToken, type JwtPayload } from '@/utils';
 import type { AuthPayload } from '@/types/auth';
-import { AuthService } from '../services/auth.service';
-import { PrismaClient } from '../generated/prisma';
+import { PrismaClient } from '@/generated/prisma';
 
 /**
  * Authentication middleware

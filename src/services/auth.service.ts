@@ -8,12 +8,11 @@
  * @version 1.0.0
  */
 
-import { PrismaClient } from '../generated/prisma';
-import type { User } from '../generated/prisma';
-import * as bcrypt from 'bcrypt';
+import { PrismaClient } from '@/generated/prisma';
+import type { User } from '@/generated/prisma';
+import bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { generateToken, verifyToken, type JwtPayload } from '../utils/jwt.util';
-import { NotFoundError, UnauthorizedError } from '../utils/error.util';
+import { generateToken, NotFoundError, UnauthorizedError } from '@/utils';
 
 export class AuthService {
   private prisma: PrismaClient;

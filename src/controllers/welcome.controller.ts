@@ -6,8 +6,8 @@
  */
 
 import type { Request, Response } from 'express';
-import { ApiResponse } from '../models/responses';
-import type { WelcomeData, HealthData } from '../models/responses/welcome.response';
+import { ApiResponse } from '@/models/responses';
+import type { WelcomeData, HealthData } from '@/models/responses';
 
 /**
  * Controller class for welcome and health check endpoints

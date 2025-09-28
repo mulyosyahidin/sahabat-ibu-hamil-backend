@@ -9,21 +9,21 @@ import path from 'path';
 import fs from 'fs';
 import type { PrismaClient } from '@prisma/client';
 import { NotFoundError } from '@/utils';
-import { ChatService } from './chat.service';
-import { DeviceStatus } from '../generated/prisma';
+import { ChatEngine } from '@/services/chat-engine';
+import { DeviceStatus } from '@/generated/prisma';
 
 export class WhatsAppService {
   private io: SocketIOServer;
   private sessions: Map<string, WASocket> = new Map();
   private sessionsDir: string;
   private prisma: PrismaClient;
-  private chatService: ChatService;
+  private ChatEngine: ChatEngine;
 
   constructor(io: SocketIOServer, prisma: PrismaClient) {
     this.io = io;
     this.sessionsDir = path.join(process.cwd(), 'sessions');
     this.prisma = prisma;
-    this.chatService = new ChatService(prisma, this);
+    this.ChatEngine = new ChatEngine(prisma, this);
 
     // Create sessions directory if it doesn't exist
     if (!fs.existsSync(this.sessionsDir)) {
@@ -219,7 +219,7 @@ export class WhatsAppService {
       sock.ev.on('messages.upsert', async (m) => {
         const messages = m.messages;
         for (const message of messages) {
-          await this.chatService.handleIncomingMessage(deviceCode, message);
+          await this.ChatEngine.handleIncomingMessage(deviceCode, message);
         }
       });
 

@@ -9,7 +9,7 @@
  */
 
 import jwt from 'jsonwebtoken';
-import type { UserDto } from '../models/dto/user.dto';
+import type { UserDto } from '@/models/dto/user.dto';
 
 /**
  * JWT Payload interface

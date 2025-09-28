@@ -11,13 +11,12 @@
 import type { Request, Response } from 'express';
 import type { ParamsDictionary } from 'express-serve-static-core';
 import type { ParsedQs } from 'qs';
-import { PrismaClient } from '../generated/prisma';
-import { AuthService } from '../services/auth.service';
-import { ApiResponse } from '../models/responses/base.response';
-import { validateAndRespond } from '../utils/validation.util';
-import type { LoginRequest } from '../models/requests/auth.request';
-import { loginValidationSchema } from '../validations/auth.validation';
-import { AppError } from '../utils/error.util';
+import { PrismaClient } from '@/generated/prisma';
+import { AuthService } from '@/services';
+import { ApiResponse } from '@/models/responses';
+import { validateAndRespond, AppError } from '@/utils';
+import type { LoginRequest } from '@/models/requests';
+import { loginValidationSchema } from '@/validations';
 
 export class AuthController {
   private authService: AuthService;

@@ -9,8 +9,8 @@
  */
 
 import { Router } from 'express';
-import { DeviceController } from '../controllers/device.controller';
-import { authMiddleware } from '../middlewares/auth.middleware';
+import { DeviceController } from '@/controllers';
+import { authMiddleware } from '@/middlewares';
 
 const router = Router();
 const deviceController = new DeviceController();

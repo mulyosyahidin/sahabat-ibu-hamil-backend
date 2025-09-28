@@ -8,13 +8,11 @@
  * @version 1.0.0
  */
 
-import { PrismaClient, DeviceStatus } from '../generated/prisma';
-import type { CreateDeviceRequest, UpdateDeviceRequest } from '../models/requests/device.request';
-import { NotFoundError, BadRequestError, InternalServerError } from '../utils/error.util';
-import { generateDeviceCode } from '../utils/code.util';
-import { PaginatedResponseHelper, type PaginatedResponse } from '../models/responses/paginated.response';
-import { appInstanceManager } from '../utils/app-instance.util';
-import { type DeviceDto } from '../models/dto';
+import { PrismaClient, DeviceStatus } from '@/generated/prisma';
+import type { CreateDeviceRequest, UpdateDeviceRequest } from '@/models/requests';
+import { NotFoundError, BadRequestError, InternalServerError, generateDeviceCode, appInstanceManager } from '@/utils';
+import { PaginatedResponseHelper, type PaginatedResponse } from '@/models/responses';
+import { type DeviceDto } from '@/models/dto';
 
 export class DeviceService {
   private prisma: PrismaClient;

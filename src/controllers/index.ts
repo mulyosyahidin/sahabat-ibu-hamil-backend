@@ -11,3 +11,4 @@
 
 export { AuthController } from './auth.controller';
 export { DeviceController } from './device.controller';
+export { WelcomeController } from './welcome.controller';

@@ -12,12 +12,12 @@ import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import router from './routes/router';
-import { WhatsAppService } from './services/whatsapp.service';
-import { ChatService } from './services/chat.service';
+import { WhatsAppService } from './services/whatsapp/whatsapp.service';
 import { DeviceService } from './services/device.service';
-import { SocketService } from './services/socket.service';
+import { SocketService } from './services/socket/socket.service';
 import { PrismaClient } from './generated/prisma';
 import { appInstanceManager } from './utils/app-instance.util';
+import { ChatEngine } from './services/chat-engine/chat.engine';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -116,12 +116,12 @@ export const createApp = (port: number = 3000): {
   const socketService = new SocketService(io);
   const whatsappService = new WhatsAppService(io, prisma);
   const deviceService = new DeviceService(prisma);
-  const chatService = new ChatService(prisma, whatsappService);
+  const chatEngine = new ChatEngine(prisma, whatsappService);
   
   // Set services in app instance manager
   appInstanceManager.setWhatsAppService(whatsappService);
   appInstanceManager.setDeviceService(deviceService);
-  appInstanceManager.setChatService(chatService);
+  appInstanceManager.setChatEngine(chatEngine);
   
   // Set up middleware and routes
   initializeMiddlewares(app);

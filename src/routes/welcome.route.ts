@@ -7,7 +7,7 @@
  */
 
 import { Router } from 'express';
-import { WelcomeController } from '../controllers/welcome.controller';
+import { WelcomeController } from '@/controllers';
 
 const router = Router();
 

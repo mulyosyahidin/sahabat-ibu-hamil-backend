@@ -105,29 +105,3 @@ export class InternalServerError extends AppError {
     super(message, 500);
   }
 }
-
-/**
- * Error response interface
- */
-export interface ErrorResponse {
-  success: false;
-  message: string;
-  error?: string;
-  statusCode?: number;
-}
-
-/**
- * Create standardized error response
- */
-export const createErrorResponse = (
-  message: string, 
-  statusCode: number = 500, 
-  error?: string
-): ErrorResponse => {
-  return {
-    success: false,
-    message,
-    ...(error && { error }),
-    statusCode
-  };
-};

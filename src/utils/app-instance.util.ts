@@ -1,6 +1,7 @@
-import { WhatsAppService } from '../services/whatsapp.service';
-import { DeviceService } from '../services/device.service';
-import { ChatService } from '../services/chat.service';
+import { PrismaClient } from '@/generated/prisma';
+import type { DeviceService } from '@/services';
+import type { ChatEngine } from '@/services/chat-engine';
+import type { WhatsAppService } from '@/services/whatsapp';
 
 /**
  * Global app instance manager
@@ -10,7 +11,7 @@ class AppInstanceManager {
   private static instance: AppInstanceManager;
   private whatsappService: WhatsAppService | null = null;
   private deviceService: DeviceService | null = null;
-  private chatService: ChatService | null = null;
+  private chatEngine: ChatEngine | null = null;
 
   private constructor() {}
 
@@ -72,22 +73,22 @@ class AppInstanceManager {
   /**
    * Set Chat service instance
    */
-  setChatService(service: ChatService): void {
-    this.chatService = service;
+  setChatEngine(service: ChatEngine): void {
+    this.chatEngine = service;
   }
 
   /**
    * Get Chat service instance
    */
-  getChatService(): ChatService | null {
-    return this.chatService;
+  getChatEngine(): ChatEngine | null {
+    return this.chatEngine;
   }
 
   /**
    * Check if Chat service is initialized
    */
-  isChatServiceInitialized(): boolean {
-    return this.chatService !== null;
+  isChatEngineInitialized(): boolean {
+    return this.chatEngine !== null;
   }
 }
 

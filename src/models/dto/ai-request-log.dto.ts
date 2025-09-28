@@ -8,7 +8,7 @@
  * @version 1.0.0
  */
 
-import type { AiEndpoint, AiModel, AiRequestStatus } from "../../generated/prisma";
+import type { AiEndpoint, AiModel, AiRequestStatus } from "@/generated/prisma";
 
 /**
  * AI Request Log DTO - represents the ai_request_logs entity structure

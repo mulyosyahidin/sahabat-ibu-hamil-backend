@@ -9,8 +9,8 @@
  */
 
 import OpenAI from "openai";
-import type { Chat } from "../../generated/prisma";
-import { openaiConfig } from "../../config/openai";
+import type { Chat } from "@/generated/prisma";
+import { openaiConfig } from "@/config";
 
 // Types for OpenAI Conversation API
 export interface ConversationCreateParams {

@@ -1,14 +1,11 @@
-import { MessageContentSource, MessageDirection, MessageType, PrismaClient, type Chat } from '../generated/prisma';
-import { ReminderService } from './reminder.service';
+import { MessageContentSource, MessageDirection, MessageType, PrismaClient, type Chat } from '@/generated/prisma';
+import { ReminderService } from '@/services';
+import { WhatsAppService } from '@/services/whatsapp';
 import { asJsonObject, getNumericMenuChoice, NotFoundError, runIfOpenAIEnabled } from '@/utils';
 import * as fs from 'fs';
-import { extractName } from './openai/nlu/nlu-name';
-import { extractAge } from './openai/nlu/nlu-age';
-import { extractMenuChoice } from './openai/nlu/nlu-menu';
-import { createConversation } from './openai/conversation';
-import type { WhatsAppService } from './whatsapp.service';
+import { extractName, extractAge, extractMenuChoice, createConversation } from '@/services/openai';
 
-export class ChatService {
+export class ChatEngine {
   private prisma: PrismaClient;
   private whatsappService: WhatsAppService;
   private reminderService: ReminderService;

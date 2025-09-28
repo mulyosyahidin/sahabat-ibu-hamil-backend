@@ -11,15 +11,13 @@
 import type { Request, Response } from 'express';
 import type { ParamsDictionary } from 'express-serve-static-core';
 import type { ParsedQs } from 'qs';
-import { PrismaClient } from '../generated/prisma';
-import { DeviceService } from '../services/device.service';
-import { ApiResponse } from '../models/responses/base.response';
-import { validateAndRespond } from '../utils/validation.util';
-import type { CreateDeviceRequest, UpdateDeviceRequest } from '../models/requests/device.request';
-import { createDeviceValidationSchema, updateDeviceValidationSchema } from '../validations/device.validation';
-import { AppError } from '../utils/error.util';
-import { toDeviceResponseData, type DevicesListData } from '../models/responses/device.response';
-import { appInstanceManager } from '../utils/app-instance.util';
+import { PrismaClient } from '@/generated/prisma';
+import { DeviceService } from '@/services';
+import { ApiResponse, toDeviceResponseData, type DevicesListData } from '@/models/responses';
+import { validateAndRespond } from '@/utils';
+import type { CreateDeviceRequest, UpdateDeviceRequest } from '@/models/requests';
+import { createDeviceValidationSchema, updateDeviceValidationSchema } from '@/validations';
+import { AppError, appInstanceManager } from '@/utils';
 
 export class DeviceController {
   private deviceService: DeviceService;

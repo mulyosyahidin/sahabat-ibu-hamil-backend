@@ -8,7 +8,7 @@
  * @version 1.0.0
  */
 
-import type { DeviceDto } from '../dto';
+import type { DeviceDto } from '@/models/dto';
 import type { BaseResponse } from './base.response';
 import type { PaginatedResponse } from './paginated.response';
 

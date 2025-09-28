@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BaseNLU, type BaseNLUResult } from "./nlu";
-import type {Chat as ChatEntity} from "../../../generated/prisma";
+import type {Chat as ChatEntity} from "@/generated/prisma";
 
 export interface NameResult extends BaseNLUResult {
   name: string;

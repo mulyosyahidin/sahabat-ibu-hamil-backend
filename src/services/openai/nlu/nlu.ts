@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 import { z } from "zod";
-import { AiLogger } from "../aiLogger";
-import { AiRequestStatus, PrismaClient } from "../../../generated/prisma";
-import { openaiConfig } from "../../../config/openai";
+import { AiLogger } from "@/services/openai";
+import { AiRequestStatus, PrismaClient } from "@/generated/prisma";
+import { openaiConfig } from "@/config/openai";
 
 // Common types for Responses API parsing
 export type OutputJSONPart = { type: "output_json"; parsed: unknown };

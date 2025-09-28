@@ -1,5 +1,5 @@
-import { PrismaClient, AiRequestStatus, AiModel, AiEndpoint } from "../../generated/prisma";
-import { aiPricing } from "../../config/aiPricing";
+import { PrismaClient, AiRequestStatus, AiModel, AiEndpoint } from "@/generated/prisma";
+import { aiPricing } from "@/config";
 
 export interface LogRequestParams {
   chatId?: number | undefined;
