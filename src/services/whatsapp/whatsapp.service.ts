@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
-import makeWASocket, {
+import {
+  makeWASocket,
   DisconnectReason,
   useMultiFileAuthState
 } from '@whiskeysockets/baileys';

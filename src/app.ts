@@ -19,9 +19,14 @@ import { PrismaClient } from './generated/prisma';
 import { appInstanceManager } from './utils/app-instance.util';
 import { ChatEngine } from './services/chat-engine/chat.engine';
 
-// ES module equivalent of __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = (() => {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    return path.dirname(__filename);
+  } catch {
+    return path.dirname(__filename);
+  }
+})();
 
 /**
  * Initialize application middleware
