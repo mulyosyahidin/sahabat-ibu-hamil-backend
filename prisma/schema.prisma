@@ -55,6 +55,12 @@ enum MessageType {
   OTHER
 }
 
+enum ReminderTimeOfDay {
+  MORNING
+  AFTERNOON
+  EVENING
+}
+
 enum AiRequestStatus {
   PENDING
   SUCCESS
@@ -162,6 +168,7 @@ model Message {
   direction    MessageDirection
   type         MessageType           @default(TEXT)
   body         String?               @db.Text
+  media        Json?
   meta         Json?
   created_at   DateTime              @default(now())
  
@@ -177,15 +184,14 @@ model Reminder {
   chat              Chat      @relation(fields: [chat_id], references: [id], onDelete: Cascade)
  
   active            Boolean   @default(true)
-  time_of_day       String?   @db.VarChar(50) // "pagi|siang|malam" atau "HH:MM"
+  time_of_day       ReminderTimeOfDay
   tz                String    @default("Asia/Jakarta") @db.VarChar(50)
-  next_run_at       DateTime?
   last_run_at       DateTime?
-  next_run_message  String?   @db.Text // Message to be sent when reminder runs
+  next_run_message  String?   @db.Text
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
  
-  @@index([active, next_run_at])
+  @@unique([chat_id, time_of_day])
   @@index([chat_id])
   @@map("reminders")
 }

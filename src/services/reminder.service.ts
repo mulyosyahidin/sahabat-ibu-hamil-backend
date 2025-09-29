@@ -1,13 +1,13 @@
-import type { PrismaClient, Reminder } from "@/generated/prisma";
+import type { PrismaClient, Reminder, ReminderTimeOfDay } from "@/generated/prisma";
 
-// Time slot constants
+// Time slot constants - updated to match ReminderTimeOfDay enum
 export const TIME_SLOTS = {
-  MORNING: 'pagi',
-  AFTERNOON: 'siang', 
-  EVENING: 'malam'
+  MORNING: 'MORNING' as const,
+  AFTERNOON: 'AFTERNOON' as const, 
+  EVENING: 'EVENING' as const
 } as const;
 
-export type TimeSlot = typeof TIME_SLOTS[keyof typeof TIME_SLOTS];
+export type TimeSlot = ReminderTimeOfDay;
 
 // Message templates for each time slot - 10 messages per time slot
 const REMINDER_MESSAGES = {
@@ -257,16 +257,14 @@ export class ReminderService {
     return `${messageData.title}\n\n${messageData.message}`;
   }
 
-  async createReminder(chatId: number, timeOfDay?: string): Promise<Reminder> {
-    const nextRunAt = timeOfDay ? this.calculateNextRunAt(timeOfDay as TimeSlot) : null;
-    const nextRunMessage = timeOfDay ? this.formatMessageForDelivery(this.getRandomMessageForTimeSlot(timeOfDay as TimeSlot)) : null;
+  async createReminder(chatId: number, timeOfDay: ReminderTimeOfDay): Promise<Reminder> {
+    const nextRunMessage = timeOfDay ? this.formatMessageForDelivery(this.getRandomMessageForTimeSlot(timeOfDay)) : null;
     
     return await this.prisma.reminder.create({
       data: {
         chat_id: chatId,
-        time_of_day: timeOfDay || null,
+        time_of_day: timeOfDay,
         active: true,
-        next_run_at: nextRunAt,
         next_run_message: nextRunMessage
       }
     });
@@ -283,27 +281,17 @@ export class ReminderService {
   }
 
   /**
-   * Update reminder's next run time
-   */
-  async updateNextRunAt(reminderId: number, nextRunAt: Date): Promise<Reminder> {
-    return await this.prisma.reminder.update({
-      where: { id: reminderId },
-      data: { next_run_at: nextRunAt }
-    });
-  }
-
-  /**
    * Format reminder time display
    */
-  formatReminderTime(timeOfDay: string | null): string {
+  formatReminderTime(timeOfDay: ReminderTimeOfDay | null): string {
     if (!timeOfDay) return 'Belum diatur';
     
     switch (timeOfDay) {
-      case 'pagi':
+      case TIME_SLOTS.MORNING:
         return '🌅 Pagi (08:00)';
-      case 'siang':
+      case TIME_SLOTS.AFTERNOON:
         return '☀️ Siang (12:00)';
-      case 'malam':
+      case TIME_SLOTS.EVENING:
         return '🌙 Malam (20:00)';
       default:
         return `⏰ ${timeOfDay}`;
@@ -338,15 +326,6 @@ export class ReminderService {
       
       text += `${index + 1}. ${timeDisplay}\n`;
       text += `   Status: ${status}\n`;
-      
-      if (reminder.next_run_at) {
-        const nextRun = new Date(reminder.next_run_at).toLocaleString('id-ID', {
-          timeZone: reminder.tz,
-          dateStyle: 'short',
-          timeStyle: 'short'
-        });
-        text += `   Berikutnya: ${nextRun}\n`;
-      }
       
       text += '\n';
     });
@@ -436,14 +415,12 @@ export class ReminderService {
 
     // If inactive reminder exists, reactivate it with new nextRunAt and nextRunMessage
     if (inactiveReminder) {
-      const nextRunAt = this.calculateNextRunAt(timeSlot);
       const nextRunMessage = this.formatMessageForDelivery(this.getRandomMessageForTimeSlot(timeSlot));
       
       return await this.prisma.reminder.update({
         where: { id: inactiveReminder.id },
         data: { 
           active: true,
-          next_run_at: nextRunAt,
           next_run_message: nextRunMessage,
           updated_at: new Date()
         }
@@ -577,7 +554,7 @@ export class ReminderService {
   /**
    * Deactivate reminder for specific time slot
    */
-  async deactivateReminderForTimeSlot(chatId: number, timeSlot: string): Promise<void> {
+  async deactivateReminderForTimeSlot(chatId: number, timeSlot: ReminderTimeOfDay): Promise<void> {
     const reminders = await this.getChatReminders(chatId);
     const remindersByTimeSlot = this.getRemindersByTimeSlot(reminders);
     
@@ -602,7 +579,7 @@ export class ReminderService {
   /**
    * Generate reminder deactivated message
    */
-  generateReminderDeactivatedMessage(timeSlot: string): string {
+  generateReminderDeactivatedMessage(timeSlot: ReminderTimeOfDay): string {
     const timeDisplay = this.formatReminderTime(timeSlot);
     
     let text = '🔕 *Reminder Berhasil Dinonaktifkan!*\n\n';

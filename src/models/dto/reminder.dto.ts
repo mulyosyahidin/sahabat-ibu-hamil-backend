@@ -17,7 +17,6 @@ export interface ReminderDto {
   active: boolean;
   time_of_day: string | null;
   tz: string;
-  next_run_at: Date | null;
   last_run_at: Date | null;
   next_run_message: string | null;
   created_at: Date;

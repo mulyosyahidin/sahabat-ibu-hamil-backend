@@ -77,6 +77,7 @@ export class ChatEngine {
             wa_number: phoneNumber,
             scene_stack: ['registrasi'],
             last_active_at: new Date(),
+            ctx: JSON.stringify({ isNewUser: true, registrationStep: 'name' }),
           },
         });
 
