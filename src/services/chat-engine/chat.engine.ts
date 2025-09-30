@@ -1,19 +1,22 @@
-import { MessageContentSource, MessageDirection, MessageType, PrismaClient, type Chat } from '@/generated/prisma';
+import { MessageContentSource, MessageDirection, MessageType, type Chat } from '@/generated/prisma';
 import { ReminderService } from '@/services';
 import { WhatsAppService } from '@/services/whatsapp';
 import { asJsonObject, getNumericMenuChoice, NotFoundError, runIfOpenAIEnabled } from '@/utils';
 import * as fs from 'fs';
 import { extractName, extractAge, extractMenuChoice, createConversation } from '@/services/openai';
 
+import type { PrismaClient } from "@/generated/prisma";
+import type { QueueService } from "@/services/queue.service";
+
 export class ChatEngine {
   private prisma: PrismaClient;
   private whatsappService: WhatsAppService;
   private reminderService: ReminderService;
 
-  constructor(prisma: PrismaClient, whatsappService: WhatsAppService) {
+  constructor(prisma: PrismaClient, whatsappService: WhatsAppService, queueService: QueueService) {
     this.prisma = prisma;
     this.whatsappService = whatsappService;
-    this.reminderService = new ReminderService(prisma);
+    this.reminderService = new ReminderService(prisma, queueService);
   }
 
   /**
@@ -191,6 +194,9 @@ export class ChatEngine {
           break;
         case 'reminder.deactivation_selection':
           await this.handleReminderDeactivationSelection(chat, message);
+          break;
+        case 'reminder.custom_time':
+          await this.handleReminderCustomTime(chat, message);
           break;
         case 'profile.edit_name':
           await this.handleProfileEditName(chat, message);
@@ -903,6 +909,10 @@ export class ChatEngine {
           );
         }
         break;
+      case 4:
+        await this.updateChatScene(chat.id, 'reminder.custom_time');
+        await this.sendTextResponse(chat, chat.wa_number, this.reminderService.generateCustomTimePrompt());
+        break;
       case 9:
         // Back to reminder menu
         await this.updateChatScene(chat.id, 'menu.reminder');
@@ -950,19 +960,19 @@ export class ChatEngine {
         return;
       }
   
-      // Get time slot for the choice
-      const timeSlot = await this.reminderService.getTimeSlotByDeactivationChoice(chat.id, choice);
+      // Get reminder for the choice
+      const reminder = await this.reminderService.getReminderByDeactivationChoice(chat.id, choice);
       
-      if (!timeSlot) {
+      if (!reminder) {
         await this.sendTextResponse(chat, chat.wa_number,'❌ Pilihan tidak valid. Silakan pilih nomor yang tersedia.');
         return;
       }
   
-      // Deactivate the reminder
-      await this.reminderService.deactivateReminderForTimeSlot(chat.id, timeSlot);
+      // Deactivate the specific reminder
+      await this.reminderService.deactivateReminder(reminder.id);
       
       // Generate success message
-      const successMessage = this.reminderService.generateReminderDeactivatedMessage(timeSlot);
+      const successMessage = this.reminderService.generateReminderDeactivatedMessage(reminder.time_of_day, reminder.custom_time);
       await this.sendTextResponse(chat, chat.wa_number, successMessage);
   
       // Update scene back to reminder menu
@@ -1291,6 +1301,68 @@ export class ChatEngine {
           'Ketik pilihan Anda:'
         );
         break;
+    }
+  }
+
+/**
+   * Handle custom time input for reminders
+   */
+  private async handleReminderCustomTime(chat: Chat, message: any): Promise<void> {
+    const messageText = (message.message?.conversation || message.body || message.text || message.message.extendedTextMessage.text || '').trim();
+
+    // Handle navigation options first
+    if (messageText === '9') {
+      await this.updateChatScene(chat.id, 'reminder.time_selection');
+      const timeSelectionMenu = await this.reminderService.generateTimeSelectionMenu(chat.id);
+      await this.sendTextResponse(chat, chat.wa_number, timeSelectionMenu);
+      return;
+    }
+
+    if (messageText === '0') {
+      await this.updateChatScene(chat.id, 'menu.root');
+      await this.sendMainMenuOption(chat);
+      return;
+    }
+
+    // Validate and process custom time
+    try {
+      const validation = this.reminderService.validateCustomTime(messageText);
+      
+      if (!validation.valid) {
+        await this.sendTextResponse(chat, chat.wa_number, 
+          `❌ ${validation.error}\n\n` +
+          'Silakan masukkan waktu dengan format yang benar (HH:mm).\n\n' +
+          'Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama'
+        );
+        return;
+      }
+
+      // Create custom time reminder
+      await this.reminderService.createCustomTimeReminder(chat.id, validation.time!);
+      
+      // Send success message
+      const successMessage = this.reminderService.generateCustomReminderCreatedMessage(validation.time!);
+      await this.sendTextResponse(chat, chat.wa_number, successMessage);
+
+      // Update scene back to reminder menu
+      await this.updateChatScene(chat.id, 'menu.reminder');
+
+    } catch (error) {
+      console.error('Error creating custom time reminder:', error);
+      
+      let errorMessage = '❌ Terjadi kesalahan saat membuat reminder. Silakan coba lagi.';
+      
+      // Handle specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('sudah memiliki reminder kustom aktif')) {
+          errorMessage = `❌ ${error.message}`;
+        }
+      }
+      
+      await this.sendTextResponse(chat, chat.wa_number, 
+        `${errorMessage}\n\n` +
+        'Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama'
+      );
     }
   }
 

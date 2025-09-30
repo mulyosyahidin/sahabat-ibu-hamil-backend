@@ -2,6 +2,7 @@ import { PrismaClient } from '@/generated/prisma';
 import type { DeviceService } from '@/services';
 import type { ChatEngine } from '@/services/chat-engine';
 import type { WhatsAppService } from '@/services/whatsapp';
+import type { HealthCheckService } from '@/services/health-check.service';
 
 /**
  * Global app instance manager
@@ -12,6 +13,7 @@ class AppInstanceManager {
   private whatsappService: WhatsAppService | null = null;
   private deviceService: DeviceService | null = null;
   private chatEngine: ChatEngine | null = null;
+  private healthCheckService: HealthCheckService | null = null;
 
   private constructor() {}
 
@@ -89,6 +91,27 @@ class AppInstanceManager {
    */
   isChatEngineInitialized(): boolean {
     return this.chatEngine !== null;
+  }
+
+  /**
+   * Set Health Check service instance
+   */
+  setHealthCheckService(service: HealthCheckService): void {
+    this.healthCheckService = service;
+  }
+
+  /**
+   * Get Health Check service instance
+   */
+  getHealthCheckService(): HealthCheckService | null {
+    return this.healthCheckService;
+  }
+
+  /**
+   * Check if Health Check service is initialized
+   */
+  isHealthCheckServiceInitialized(): boolean {
+    return this.healthCheckService !== null;
   }
 }
 

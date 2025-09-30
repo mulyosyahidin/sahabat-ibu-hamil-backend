@@ -10,10 +10,12 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-COPY prisma ./prisma/
 
 # Install all dependencies (including dev dependencies for build)
 RUN npm ci && npm cache clean --force
+
+# Copy prisma directory (including migrations)
+COPY prisma ./prisma/
 
 # Generate Prisma client
 RUN npx prisma generate
@@ -71,7 +73,7 @@ ENV TMPDIR=/tmp/app
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -fsS http://localhost:3000/health || exit 1
+  CMD curl -fsS http://localhost:3000/api/health || exit 1
 
 # Use dumb-init and run initialization script
 ENTRYPOINT ["dumb-init", "--"]

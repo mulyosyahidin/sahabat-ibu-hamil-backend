@@ -43,7 +43,7 @@ export interface MemoryUsage {
  */
 export interface HealthData {
   /** Server status indicator */
-  status: 'OK' | 'ERROR' | 'WARNING';
+  status: 'OK' | 'ERROR' | 'WARNING' | 'DEGRADED';
   /** ISO timestamp of when the health check was performed */
   timestamp: string;
   /** Server uptime in seconds */
@@ -52,4 +52,45 @@ export interface HealthData {
   memory: MemoryUsage;
   /** Node.js version string */
   version: string;
+  /** Database and Redis connection status */
+  services?: {
+    database?: {
+      status: 'connected' | 'disconnected' | 'error';
+      responseTime?: {
+        total: number;
+        connection: number;
+        query: number;
+        unit: 'ms';
+      };
+      details?: {
+        host?: string;
+        database?: string;
+        connectionPool?: {
+          active: number;
+          idle: number;
+          total: number;
+        };
+      };
+      error?: string;
+    };
+    redis?: {
+      status: 'connected' | 'disconnected' | 'error';
+      responseTime?: {
+        total: number;
+        connection: number;
+        operation: number;
+        unit: 'ms';
+      };
+      details?: {
+        host?: string;
+        port?: number;
+        database?: number;
+        memory?: {
+          used: string;
+          peak: string;
+        };
+      };
+      error?: string;
+    };
+  };
 }

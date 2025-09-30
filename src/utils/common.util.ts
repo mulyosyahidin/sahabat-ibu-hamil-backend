@@ -63,3 +63,22 @@ export async function runIfOpenAIEnabled<T>(
     throw err;
   }
 }
+
+export const setCustomTime = (
+  d: Date,
+  t: string | null | undefined,
+  defH = 9,
+  defM = 0
+) => {
+  const str = typeof t === 'string' ? t.trim() : '';
+  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(str); // RegExpExecArray | null
+
+  // Ambil string jam/menit dengan fallback aman
+  const hourStr   = (m && m[1] !== undefined) ? m[1] : String(defH);
+  const minuteStr = (m && m[2] !== undefined) ? m[2] : String(defM);
+
+  const h   = Number.parseInt(hourStr, 10);
+  const min = Number.parseInt(minuteStr, 10);
+
+  d.setHours(h, min, 0, 0);
+}

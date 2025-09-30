@@ -60,6 +60,41 @@ enum ReminderTimeOfDay {
   MORNING
   AFTERNOON
   EVENING
+  CUSTOM
+}
+
+enum ReminderLogStatus {
+  SCHEDULED
+  DISPATCHED
+  STARTED
+  SENT
+  SKIPPED
+  FAILED
+}
+
+enum BullJobState {
+  WAITING
+  DELAYED
+  ACTIVE
+  COMPLETED
+  FAILED
+  PAUSED
+  STALLED
+  RETRY
+  REMOVED
+}
+
+enum BullJobEventType {
+  ADDED
+  WAITING
+  DELAYED
+  ACTIVE
+  PROGRESS
+  COMPLETED
+  FAILED
+  STALLED
+  RETRY
+  REMOVED
 }
 
 enum AiRequestStatus {
@@ -186,15 +221,70 @@ model Reminder {
  
   active            Boolean   @default(true)
   time_of_day       ReminderTimeOfDay
+  custom_time       String?           @db.VarChar(8)
   tz                String    @default("Asia/Jakarta") @db.VarChar(50)
   last_run_at       DateTime?
   next_run_message  String?   @db.Text
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
+
+  reminder_logs    ReminderLog[]
+  reminder_jobs    ReminderJob[]
  
   @@unique([chat_id, time_of_day])
   @@index([chat_id])
   @@map("reminders")
+}
+
+// Simplified Job model for reminder scheduling
+model ReminderJob {
+  id             String            @id @db.VarChar(191) // Bull MQ job ID
+  reminder_id    Int
+  reminder       Reminder          @relation(fields: [reminder_id], references: [id], onDelete: Cascade)
+  
+  // Job status and timing
+  status         BullJobState      @default(WAITING)
+  scheduled_for  DateTime          // When this job should run
+  started_at     DateTime?
+  completed_at   DateTime?
+  failed_at      DateTime?
+  
+  // Job data and error handling
+  message        String?           @db.Text // Message to be sent
+  attempts       Int               @default(0)
+  max_attempts   Int               @default(3)
+  error_message  String?           @db.Text
+  
+  created_at     DateTime          @default(now())
+  updated_at     DateTime          @updatedAt
+  
+  @@index([reminder_id])
+  @@index([status, scheduled_for])
+  @@index([scheduled_for])
+  @@map("reminder_jobs")
+}
+
+// Simplified log for tracking reminder execution history
+model ReminderLog {
+  id               Int               @id @default(autoincrement())
+  reminder_id      Int
+  reminder         Reminder          @relation(fields: [reminder_id], references: [id], onDelete: Cascade)
+  
+  // Execution details
+  status           ReminderLogStatus @default(SCHEDULED)
+  scheduled_for    DateTime          // When it was supposed to run
+  executed_at      DateTime?         // When it actually ran
+  message_sent     String?           @db.Text // Message that was sent
+  error_message    String?           @db.Text
+  
+  // Job reference (optional, for tracking)
+  job_id           String?           @db.VarChar(191)
+  
+  created_at       DateTime          @default(now())
+  
+  @@index([reminder_id])
+  @@index([status, scheduled_for])
+  @@map("reminder_logs")
 }
 
 // ===== AI LOGGING TABLES =====

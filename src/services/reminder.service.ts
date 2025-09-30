@@ -1,10 +1,13 @@
 import type { PrismaClient, Reminder, ReminderTimeOfDay } from "@/generated/prisma";
+import type { QueueService } from "./queue.service";
+import { setCustomTime } from "@/utils";
 
 // Time slot constants - updated to match ReminderTimeOfDay enum
 export const TIME_SLOTS = {
   MORNING: 'MORNING' as const,
-  AFTERNOON: 'AFTERNOON' as const, 
-  EVENING: 'EVENING' as const
+  AFTERNOON: 'AFTERNOON' as const,
+  EVENING: 'EVENING' as const,
+  CUSTOM: 'CUSTOM' as const
 } as const;
 
 export type TimeSlot = ReminderTimeOfDay;
@@ -136,14 +139,22 @@ const REMINDER_MESSAGES = {
       title: '🌙 Peaceful Evening!',
       message: 'Akhiri hari dengan hati yang tenang. Konsumsi makanan kaya magnesium untuk tidur yang nyenyak. Tomorrow is another beautiful day! ✨'
     }
-  ]
+  ],
+  [TIME_SLOTS.CUSTOM]: [
+    {
+      title: '🕒 Waktu Kustom, Bunda!',
+      message: 'Setel reminder sesuai dengan kebutuhan Bunda. Jangan lupa untuk merencanakan dengan baik. 🔔'
+    },
+  ],
 };
 
 export class ReminderService {
   private prisma: PrismaClient;
+  private queueService: QueueService;
 
-  constructor(prisma: PrismaClient) {
+  constructor(prisma: PrismaClient, queueService: QueueService) {
     this.prisma = prisma;
+    this.queueService = queueService;
   }
 
   /**
@@ -188,43 +199,6 @@ export class ReminderService {
   }
 
   /**
-   * Create a new reminder for a chat
-   */
-  /**
-   * Calculate the next run time based on the time slot and current time
-   * Uses Indonesia timezone (WIB/UTC+7)
-   * Ensures the next run is not set for a time that has already passed today
-   */
-  private calculateNextRunAt(timeSlot: TimeSlot): Date {
-    // Create a date object for today in UTC
-    const now = new Date();
-    const nextRun = new Date();
-    
-    // Set the time based on time slot (in WIB, which will be converted to UTC)
-    switch (timeSlot) {
-      case TIME_SLOTS.MORNING:
-        // 08:00 WIB = 01:00 UTC (08 - 7 = 01)
-        nextRun.setUTCHours(1, 0, 0, 0);
-        break;
-      case TIME_SLOTS.AFTERNOON:
-        // 12:00 WIB = 05:00 UTC (12 - 7 = 05)
-        nextRun.setUTCHours(5, 0, 0, 0);
-        break;
-      case TIME_SLOTS.EVENING:
-        // 20:00 WIB = 13:00 UTC (20 - 7 = 13)
-        nextRun.setUTCHours(13, 0, 0, 0);
-        break;
-    }
-    
-    // If the time has already passed today (comparing in UTC), set it for tomorrow
-    if (nextRun <= now) {
-      nextRun.setUTCDate(nextRun.getUTCDate() + 1);
-    }
-    
-    return nextRun;
-  }
-
-  /**
    * Get a random message for a specific time slot
    */
   private getRandomMessageForTimeSlot(timeSlot: TimeSlot): { title: string; message: string } {
@@ -238,7 +212,7 @@ export class ReminderService {
     }
     const randomIndex = Math.floor(Math.random() * messages.length);
     const selectedMessage = messages[randomIndex];
-    
+
     // This should never happen given our length check above, but TypeScript needs assurance
     if (!selectedMessage) {
       return {
@@ -246,7 +220,7 @@ export class ReminderService {
         message: 'Jangan lupa untuk menjaga kesehatan Anda dan si kecil!'
       };
     }
-    
+
     return selectedMessage;
   }
 
@@ -259,15 +233,29 @@ export class ReminderService {
 
   async createReminder(chatId: number, timeOfDay: ReminderTimeOfDay): Promise<Reminder> {
     const nextRunMessage = timeOfDay ? this.formatMessageForDelivery(this.getRandomMessageForTimeSlot(timeOfDay)) : null;
-    
-    return await this.prisma.reminder.create({
+
+    const reminder = await this.prisma.reminder.create({
       data: {
         chat_id: chatId,
         time_of_day: timeOfDay,
+        custom_time: null,
         active: true,
         next_run_message: nextRunMessage
       }
     });
+
+    // Schedule the reminder job in BullMQ
+    if (timeOfDay) {
+      const nextScheduledTime = this.calculateNextScheduledTime(timeOfDay);
+      await this.queueService.scheduleReminder(
+        reminder.id, 
+        reminder.chat_id, 
+        reminder.next_run_message || '', 
+        nextScheduledTime
+      );
+    }
+
+    return reminder;
   }
 
   /**
@@ -283,9 +271,9 @@ export class ReminderService {
   /**
    * Format reminder time display
    */
-  formatReminderTime(timeOfDay: ReminderTimeOfDay | null): string {
+  formatReminderTime(timeOfDay: ReminderTimeOfDay | null, customTime?: string | null): string {
     if (!timeOfDay) return 'Belum diatur';
-    
+
     switch (timeOfDay) {
       case TIME_SLOTS.MORNING:
         return '🌅 Pagi (08:00)';
@@ -293,12 +281,12 @@ export class ReminderService {
         return '☀️ Siang (12:00)';
       case TIME_SLOTS.EVENING:
         return '🌙 Malam (20:00)';
+      case TIME_SLOTS.CUSTOM:
+        return customTime ? `🕒 Waktu Kustom (${customTime})` : '🕒 Waktu Kustom (Belum diatur)';
       default:
         return `⏰ ${timeOfDay}`;
     }
   }
-
-
 
   /**
    * Generate text for deactivating reminders when none exist
@@ -319,19 +307,19 @@ export class ReminderService {
    */
   generateActiveReminderListText(reminders: Reminder[]): string {
     let text = '📝 *Jadwal Reminder Saya*\n\n';
-    
+
     reminders.forEach((reminder, index) => {
-      const timeDisplay = this.formatReminderTime(reminder.time_of_day);
+      const timeDisplay = this.formatReminderTime(reminder.time_of_day, reminder.custom_time);
       const status = reminder.active ? '✅ Aktif' : '❌ Nonaktif';
-      
-      text += `${index + 1}. ${timeDisplay}\n`;
-      text += `   Status: ${status}\n`;
-      
+
+      text += `${timeDisplay}\n`;
+      text += `${status}\n`;
+
       text += '\n';
     });
 
-    text += '💡 *Tips:* Reminder akan mengirimkan pesan otomatis sesuai jadwal yang telah diatur untuk membantu Anda mengingat hal-hal penting selama kehamilan.';
-    
+    text += 'Ketik 9️⃣ untuk kembali ke menu sebelumnya, atau 0️⃣ untuk kembali ke menu utama';
+
     return text;
   }
 
@@ -366,15 +354,16 @@ export class ReminderService {
     const grouped: Record<string, Reminder[]> = {
       [TIME_SLOTS.MORNING]: [],
       [TIME_SLOTS.AFTERNOON]: [],
-      [TIME_SLOTS.EVENING]: []
+      [TIME_SLOTS.EVENING]: [],
+      [TIME_SLOTS.CUSTOM]: []
     };
-    
+
     reminders.forEach(reminder => {
       if (reminder.time_of_day && grouped[reminder.time_of_day]) {
         grouped[reminder.time_of_day]!.push(reminder);
       }
     });
-    
+
     return grouped;
   }
 
@@ -416,15 +405,26 @@ export class ReminderService {
     // If inactive reminder exists, reactivate it with new nextRunAt and nextRunMessage
     if (inactiveReminder) {
       const nextRunMessage = this.formatMessageForDelivery(this.getRandomMessageForTimeSlot(timeSlot));
-      
-      return await this.prisma.reminder.update({
+
+      const reactivatedReminder = await this.prisma.reminder.update({
         where: { id: inactiveReminder.id },
-        data: { 
+        data: {
           active: true,
           next_run_message: nextRunMessage,
           updated_at: new Date()
         }
       });
+
+      // Schedule the reactivated reminder job in BullMQ
+      const nextScheduledTime = this.calculateNextScheduledTime(timeSlot);
+      await this.queueService.scheduleReminder(
+        reactivatedReminder.id, 
+        reactivatedReminder.chat_id, 
+        reactivatedReminder.next_run_message || '', 
+        nextScheduledTime
+      );
+
+      return reactivatedReminder;
     }
 
     // Otherwise, create a new reminder
@@ -437,31 +437,32 @@ export class ReminderService {
   async generateTimeSelectionMenu(chatId: number): Promise<string> {
     // Get only active reminders to check availability
     const activeReminders = await this.getRemindersByTimeSlotForChat(chatId);
-    
+
     let text = '⏰ *Pilih Waktu Reminder*\n\n';
     text += 'Pilih waktu untuk reminder harian Anda:\n\n';
-    
+
     // Morning option - check if there are active reminders
     const hasActiveMorning = activeReminders[TIME_SLOTS.MORNING] && activeReminders[TIME_SLOTS.MORNING]!.length > 0;
     const morningIcon = hasActiveMorning ? '❌' : '🌅';
-    const morningStatus = hasActiveMorning ? '(Sudah ada)' : '(Tersedia)';
-    text += `1️⃣ ${morningIcon} Pagi (08:00) ${morningStatus}\n`;
-    
+    text += `1️⃣ ${morningIcon} Pagi (08:00)\n`;
+
     // Afternoon option - check if there are active reminders
     const hasActiveAfternoon = activeReminders[TIME_SLOTS.AFTERNOON] && activeReminders[TIME_SLOTS.AFTERNOON]!.length > 0;
     const afternoonIcon = hasActiveAfternoon ? '❌' : '☀️';
-    const afternoonStatus = hasActiveAfternoon ? '(Sudah ada)' : '(Tersedia)';
-    text += `2️⃣ ${afternoonIcon} Siang (12:00) ${afternoonStatus}\n`;
-    
+    text += `2️⃣ ${afternoonIcon} Siang (12:00)\n`;
+
     // Evening option - check if there are active reminders
     const hasActiveEvening = activeReminders[TIME_SLOTS.EVENING] && activeReminders[TIME_SLOTS.EVENING]!.length > 0;
     const eveningIcon = hasActiveEvening ? '❌' : '🌙';
-    const eveningStatus = hasActiveEvening ? '(Sudah ada)' : '(Tersedia)';
-    text += `3️⃣ ${eveningIcon} Malam (20:00) ${eveningStatus}\n\n`;
-    
+    text += `3️⃣ ${eveningIcon} Malam (20:00)\n`;
+
+    // custom time option
+    const customIcon = '🕒';
+    text += `4️⃣ ${customIcon} Waktu Kustom\n\n`;
+
     text += '💡 *Catatan:* Anda bisa membuat maksimal 3 reminder\n\n';
-    text += 'Ketik pilihan Anda (1-3), 9️⃣ untuk kembali ke menu sebelumnya, atau 0️⃣ untuk kembali ke menu utama';
-    
+    text += 'Ketik pilihan Anda (1-4), 9️⃣ untuk kembali ke menu sebelumnya, atau 0️⃣ untuk kembali ke menu utama';
+
     return text;
   }
 
@@ -485,14 +486,13 @@ export class ReminderService {
    * Generate success message for created reminder
    */
   generateReminderCreatedMessage(timeSlot: TimeSlot): string {
-    const messageTemplate = REMINDER_MESSAGES[timeSlot];
     const timeDisplay = this.formatReminderTime(timeSlot);
-    
+
     let text = '✅ *Reminder Berhasil Dibuat!*\n\n';
     text += `${timeDisplay} telah diaktifkan.\n`;
     text += '💡 Reminder akan dikirim otomatis setiap hari sesuai waktu yang dipilih.\n\n';
     text += 'Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama';
-    
+
     return text;
   }
 
@@ -501,54 +501,81 @@ export class ReminderService {
    */
   async generateDeactivationMenu(chatId: number): Promise<string> {
     const reminders = await this.getChatReminders(chatId);
-    
+
     if (reminders.length === 0) {
       return this.generateNoRemindersToDeactivateText();
     }
 
     const remindersByTimeSlot = await this.getRemindersByTimeSlotForChat(chatId);
-    
+
     let text = '🔕 *NONAKTIFKAN REMINDER*\n\n';
     text += 'Pilih reminder yang ingin dinonaktifkan:\n\n';
-    
+
     let optionNumber = 1;
-    const timeSlots = [TIME_SLOTS.MORNING, TIME_SLOTS.AFTERNOON, TIME_SLOTS.EVENING];
-    
+    const timeSlots = [TIME_SLOTS.MORNING, TIME_SLOTS.AFTERNOON, TIME_SLOTS.EVENING, TIME_SLOTS.CUSTOM];
+
     for (const timeSlot of timeSlots) {
       if (remindersByTimeSlot[timeSlot] && remindersByTimeSlot[timeSlot].length > 0) {
-        const timeDisplay = this.formatReminderTime(timeSlot);
-        text += `${optionNumber}️⃣ ${timeDisplay}\n`;
-        optionNumber++;
+        if (timeSlot === TIME_SLOTS.CUSTOM) {
+          // For custom reminders, show each one individually
+          for (const reminder of remindersByTimeSlot[timeSlot]) {
+            const timeDisplay = this.formatReminderTime(timeSlot, reminder.custom_time);
+            text += `${optionNumber}️⃣ ${timeDisplay}\n`;
+            optionNumber++;
+          }
+        } else {
+          const timeDisplay = this.formatReminderTime(timeSlot);
+          text += `${optionNumber}️⃣ ${timeDisplay}\n`;
+          optionNumber++;
+        }
       }
     }
-    
+
     text += '\n9️⃣ Kembali ke menu sebelumnya\n';
     text += '0️⃣ Kembali ke menu utama\n\n';
     text += `Ketik pilihan Anda (1-${optionNumber - 1}):`;
-    
+
     return text;
   }
 
   /**
-   * Get time slot by deactivation choice
+   * Get reminder by deactivation choice
    */
-  async getTimeSlotByDeactivationChoice(chatId: number, choice: number): Promise<string | null> {
+  async getReminderByDeactivationChoice(chatId: number, choice: number): Promise<Reminder | null> {
     const reminders = await this.getChatReminders(chatId);
     const remindersByTimeSlot = this.getRemindersByTimeSlot(reminders);
-    
+
     let optionNumber = 1;
-    const timeSlots = [TIME_SLOTS.MORNING, TIME_SLOTS.AFTERNOON, TIME_SLOTS.EVENING];
-    
+    const timeSlots = [TIME_SLOTS.MORNING, TIME_SLOTS.AFTERNOON, TIME_SLOTS.EVENING, TIME_SLOTS.CUSTOM];
+
     for (const timeSlot of timeSlots) {
       if (remindersByTimeSlot[timeSlot] && remindersByTimeSlot[timeSlot].length > 0) {
-        if (optionNumber === choice) {
-          return timeSlot;
+        if (timeSlot === TIME_SLOTS.CUSTOM) {
+          // For custom reminders, check each one individually
+          for (const reminder of remindersByTimeSlot[timeSlot]) {
+            if (optionNumber === choice) {
+              return reminder;
+            }
+            optionNumber++;
+          }
+        } else {
+          if (optionNumber === choice) {
+            return remindersByTimeSlot[timeSlot]?.[0] || null; // Return first reminder for this time slot
+          }
+          optionNumber++;
         }
-        optionNumber++;
       }
     }
-    
+
     return null;
+  }
+
+  /**
+   * Get time slot by deactivation choice (legacy method for backward compatibility)
+   */
+  async getTimeSlotByDeactivationChoice(chatId: number, choice: number): Promise<ReminderTimeOfDay | null> {
+    const reminder = await this.getReminderByDeactivationChoice(chatId, choice);
+    return reminder ? reminder.time_of_day : null;
   }
 
   /**
@@ -557,14 +584,14 @@ export class ReminderService {
   async deactivateReminderForTimeSlot(chatId: number, timeSlot: ReminderTimeOfDay): Promise<void> {
     const reminders = await this.getChatReminders(chatId);
     const remindersByTimeSlot = this.getRemindersByTimeSlot(reminders);
-    
+
     if (!remindersByTimeSlot[timeSlot] || remindersByTimeSlot[timeSlot].length === 0) {
       throw new Error(`No active reminder found for time slot: ${timeSlot}`);
     }
 
     // Deactivate all reminders for this time slot (should be only one, but just in case)
     const reminderIds = remindersByTimeSlot[timeSlot].map(reminder => reminder.id);
-    
+
     await this.prisma.reminder.updateMany({
       where: {
         id: { in: reminderIds },
@@ -579,14 +606,212 @@ export class ReminderService {
   /**
    * Generate reminder deactivated message
    */
-  generateReminderDeactivatedMessage(timeSlot: ReminderTimeOfDay): string {
-    const timeDisplay = this.formatReminderTime(timeSlot);
-    
+  generateReminderDeactivatedMessage(timeSlot: ReminderTimeOfDay, customTime?: string | null): string {
+    const timeDisplay = this.formatReminderTime(timeSlot, customTime);
+
     let text = '🔕 *Reminder Berhasil Dinonaktifkan!*\n\n';
     text += `${timeDisplay} telah dinonaktifkan.\n`;
     text += '💡 Anda tidak akan menerima reminder untuk waktu ini lagi.\n\n';
     text += 'Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama';
-    
+
     return text;
+  }
+
+  generateCustomTimePrompt() {
+    let text = '🕒 *PEMBUATAN REMINDER KUSTOM*\n\n';
+    text += 'Masukkan waktu kustom untuk reminder (format: HH:mm, misalnya 15:30):\n\n';
+    text += '💡 *Contoh format yang benar:*\n';
+    text += '• 07:00 (pagi)\n';
+    text += '• 14:30 (siang)\n';
+    text += '• 21:15 (malam)\n\n';
+    text += 'Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama';
+
+    return text;
+  }
+
+  /**
+   * Validate custom time format (HH:mm)
+   */
+  validateCustomTime(timeString: string): { valid: boolean; time?: string; error?: string } {
+    const trimmedTime = timeString.trim();
+
+    // Check basic format HH:mm
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
+    const match = trimmedTime.match(timeRegex);
+
+    if (!match || !match[1] || !match[2]) {
+      return {
+        valid: false,
+        error: 'Format waktu tidak valid. Gunakan format HH:mm (contoh: 15:30)'
+      };
+    }
+
+    const hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+
+    // Additional validation
+    if (hours < 0 || hours > 23) {
+      return {
+        valid: false,
+        error: 'Jam harus antara 00-23'
+      };
+    }
+
+    if (minutes < 0 || minutes > 59) {
+      return {
+        valid: false,
+        error: 'Menit harus antara 00-59'
+      };
+    }
+
+    // Format to ensure consistent HH:mm format
+    const formattedTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+
+    return {
+      valid: true,
+      time: formattedTime
+    };
+  }
+
+  /**
+   * Create custom time reminder
+   */
+  async createCustomTimeReminder(chatId: number, customTime: string): Promise<Reminder> {
+    // Validate time format first
+    const validation = this.validateCustomTime(customTime);
+    if (!validation.valid) {
+      throw new Error(validation.error || 'Invalid time format');
+    }
+
+    const formattedTime = validation.time!;
+
+    // Check if active custom reminder already exists
+    const existingCustomReminder = await this.prisma.reminder.findFirst({
+      where: {
+        chat_id: chatId,
+        time_of_day: TIME_SLOTS.CUSTOM,
+        active: true
+      }
+    });
+
+    if (existingCustomReminder) {
+      throw new Error('Anda sudah memiliki reminder kustom aktif. Nonaktifkan terlebih dahulu untuk membuat yang baru.');
+    }
+
+    // Generate random message for custom time
+    const customMessages = REMINDER_MESSAGES[TIME_SLOTS.CUSTOM];
+    const randomMessage = customMessages?.[Math.floor(Math.random() * customMessages.length)];
+    const nextRunMessage = randomMessage ? this.formatMessageForDelivery(randomMessage) : null;
+
+    // Check if there's an inactive custom reminder
+    const inactiveCustomReminder = await this.prisma.reminder.findFirst({
+      where: {
+        chat_id: chatId,
+        time_of_day: TIME_SLOTS.CUSTOM,
+        active: false
+      }
+    });
+
+    // If inactive reminder exists, reactivate it with new custom time
+    if (inactiveCustomReminder) {
+      const updatedReminder = await this.prisma.reminder.update({
+        where: { id: inactiveCustomReminder.id },
+        data: {
+          active: true,
+          custom_time: formattedTime,
+          next_run_message: nextRunMessage,
+          updated_at: new Date()
+        }
+      });
+
+      // Schedule the reactivated custom reminder job in BullMQ
+      const nextScheduledTime = this.calculateNextScheduledTime(TIME_SLOTS.CUSTOM, formattedTime);
+      await this.queueService.scheduleReminder(
+        updatedReminder.id, 
+        updatedReminder.chat_id, 
+        updatedReminder.next_run_message || '', 
+        nextScheduledTime
+      );
+
+      return updatedReminder;
+    }
+
+    // Otherwise, create a new custom reminder
+    const reminder = await this.prisma.reminder.create({
+      data: {
+        chat_id: chatId,
+        time_of_day: TIME_SLOTS.CUSTOM,
+        custom_time: formattedTime,
+        active: true,
+        next_run_message: nextRunMessage
+      }
+    });
+
+    // Schedule the new custom reminder job in BullMQ
+    const nextScheduledTime = this.calculateNextScheduledTime(TIME_SLOTS.CUSTOM, formattedTime);
+    await this.queueService.scheduleReminder(
+      reminder.id, 
+      reminder.chat_id, 
+      reminder.next_run_message || '', 
+      nextScheduledTime
+    );
+
+    return reminder;
+  }
+
+  /**
+   * Format custom time display
+   */
+  formatCustomReminderTime(customTime: string | null): string {
+    if (!customTime) return '🕒 Waktu Kustom (Belum diatur)';
+    return `🕒 Waktu Kustom (${customTime})`;
+  }
+
+  /**
+   * Generate success message for custom reminder
+   */
+  generateCustomReminderCreatedMessage(customTime: string): string {
+    let text = '✅ *Reminder Kustom Berhasil Dibuat!*\n\n';
+    text += `🕒 Waktu Kustom (${customTime}) telah diaktifkan.\n`;
+    text += 'Anda akan menerima reminder sesuai waktu yang telah ditentukan.\n\n';
+    text += 'Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama';
+
+    return text;
+  }
+
+  /**
+     * Calculate next scheduled time for a reminder based on time_of_day
+     */
+  private calculateNextScheduledTime(timeOfDay: ReminderTimeOfDay, customTime?: string | null): Date {
+    const now = new Date();
+    const nextRun = new Date();
+
+    switch (timeOfDay) {
+      case TIME_SLOTS.MORNING:
+        nextRun.setHours(8, 0, 0, 0); // 08:00 Jakarta time
+        break;
+      case TIME_SLOTS.AFTERNOON:
+        nextRun.setHours(12, 0, 0, 0); // 12:00 Jakarta time
+        break;
+      case TIME_SLOTS.EVENING:
+        nextRun.setHours(20, 0, 0, 0); // 20:00 Jakarta time
+        break;
+      case TIME_SLOTS.CUSTOM:
+        setCustomTime(nextRun, customTime);
+        break;
+      default:
+        nextRun.setHours(9, 0, 0, 0); // Default to 9:00 AM Jakarta time
+    }
+
+    // Convert Jakarta time to UTC (subtract 7 hours)
+    // Jakarta is UTC+7, so to get UTC we subtract 7 hours
+    nextRun.setHours(nextRun.getHours() - 7);
+
+    // If the scheduled time has already passed today, schedule for tomorrow
+    if (nextRun <= now) {
+      nextRun.setDate(nextRun.getDate() + 1);
+    }
+
+    return nextRun;
   }
 }

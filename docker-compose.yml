@@ -116,6 +116,26 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # BullMQ UI
+  bullmq-ui:
+    image: deadly0/bull-board:latest
+    container_name: bullmq-ui
+    ports:
+      - "8082:3000"
+    environment:
+      - REDIS_HOST=redis-database
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DB=0
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+    security_opt:
+      - no-new-privileges:true
+
 # Named volumes for data persistence
 volumes:
   mysql_data:

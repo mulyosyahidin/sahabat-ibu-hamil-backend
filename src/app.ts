@@ -18,6 +18,8 @@ import { SocketService } from './services/socket/socket.service';
 import { PrismaClient } from './generated/prisma';
 import { appInstanceManager } from './utils/app-instance.util';
 import { ChatEngine } from './services/chat-engine/chat.engine';
+import { QueueService } from './services/queue.service';
+import { HealthCheckService } from './services/health-check.service';
 
 const __dirname = (() => {
   try {
@@ -84,12 +86,14 @@ export const createApp = (port: number = 3000): {
   io: SocketIOServer;
   whatsappService: WhatsAppService;
   socketService: SocketService;
+  healthCheckService: HealthCheckService;
   port: number;
   getApp: () => express.Application;
   getServer: () => any;
   getIO: () => SocketIOServer;
   getWhatsAppService: () => WhatsAppService;
   getSocketService: () => SocketService;
+  getHealthCheckService: () => HealthCheckService;
   listen: () => void;
   getPort: () => number;
 } => {
@@ -121,12 +125,18 @@ export const createApp = (port: number = 3000): {
   const socketService = new SocketService(io);
   const whatsappService = new WhatsAppService(io, prisma);
   const deviceService = new DeviceService(prisma);
-  const chatEngine = new ChatEngine(prisma, whatsappService);
+  const queueService = new QueueService(prisma);
+  const chatEngine = new ChatEngine(prisma, whatsappService, queueService);
+  const healthCheckService = new HealthCheckService(prisma);
+  
+  // Set ChatEngine in WhatsAppService to avoid circular dependency
+  whatsappService.setChatEngine(chatEngine);
   
   // Set services in app instance manager
   appInstanceManager.setWhatsAppService(whatsappService);
   appInstanceManager.setDeviceService(deviceService);
   appInstanceManager.setChatEngine(chatEngine);
+  appInstanceManager.setHealthCheckService(healthCheckService);
   
   // Set up middleware and routes
   initializeMiddlewares(app);
@@ -188,6 +198,7 @@ export const createApp = (port: number = 3000): {
     io,
     whatsappService,
     socketService,
+    healthCheckService,
     port,
     /**
      * Get the Express application instance
@@ -215,6 +226,11 @@ export const createApp = (port: number = 3000): {
      */
     getSocketService: (): SocketService => socketService,
     /**
+     * Get the Health Check service instance
+     * @returns Health Check service
+     */
+    getHealthCheckService: (): HealthCheckService => healthCheckService,
+    /**
      * Start the HTTP server with Socket.IO
      * Begins listening on the configured port
      */
@@ -224,6 +240,18 @@ export const createApp = (port: number = 3000): {
         console.log(`Server is running on port ${port}`);
         console.log(`Socket.IO server is ready for connections`);
         
+        // Perform startup health check
+        await healthCheckService.performStartupHealthCheck();
+        
+        // Initialize Queue Service
+        try {
+          console.log('🔄 Initializing Queue Service...');
+          await queueService.initialize();
+          console.log('✅ Queue Service initialization completed');
+        } catch (error) {
+          console.error('❌ Failed to initialize Queue Service:', error);
+        }
+        
         // Initialize WhatsApp sessions from storage
         try {
           console.log('🔄 Initializing WhatsApp sessions...');
@@ -232,6 +260,9 @@ export const createApp = (port: number = 3000): {
         } catch (error) {
           console.error('❌ Failed to initialize WhatsApp sessions:', error);
         }
+        
+        // Initialize services
+        console.log('🚀 Initializing services...');
       });
     },
     /**

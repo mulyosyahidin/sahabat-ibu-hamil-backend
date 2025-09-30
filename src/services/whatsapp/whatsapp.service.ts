@@ -18,18 +18,25 @@ export class WhatsAppService {
   private sessions: Map<string, WASocket> = new Map();
   private sessionsDir: string;
   private prisma: PrismaClient;
-  private ChatEngine: ChatEngine;
+  private ChatEngine!: ChatEngine; // Using definite assignment assertion since it's set via setChatEngine()
 
   constructor(io: SocketIOServer, prisma: PrismaClient) {
     this.io = io;
     this.sessionsDir = path.join(process.cwd(), 'sessions');
     this.prisma = prisma;
-    this.ChatEngine = new ChatEngine(prisma, this);
+    // ChatEngine will be set later to avoid circular dependency
 
     // Create sessions directory if it doesn't exist
     if (!fs.existsSync(this.sessionsDir)) {
       fs.mkdirSync(this.sessionsDir, { recursive: true });
     }
+  }
+
+  /**
+   * Set ChatEngine instance (called after construction to avoid circular dependency)
+   */
+  setChatEngine(chatEngine: ChatEngine): void {
+    this.ChatEngine = chatEngine;
   }
 
   /**
