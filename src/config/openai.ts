@@ -7,6 +7,7 @@
 
 export interface OpenAIConfig {
   model: string;
+  embeddingModel: string;
   projectName: string;
   apiKey: string;
   enabled: boolean;
@@ -23,6 +24,7 @@ export function getOpenAIConfig(): OpenAIConfig {
 
   return {
     model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    embeddingModel: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
     projectName: process.env.OPENAI_PROJECT_NAME || '',
     apiKey,
     enabled: process.env.OPENAI_ENABLE === 'true'

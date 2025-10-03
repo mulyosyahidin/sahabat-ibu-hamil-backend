@@ -32,8 +32,8 @@ export const asJsonObject = (v: Prisma.JsonValue | null | undefined): Prisma.Jso
  */
 export function getNumericMenuChoice(text: string): number | null {
   const t = text.trim();
-  // Only accept 1-8 (allows leading zeros, e.g., "01")
-  const m = t.match(/^0*([1-8])$/);
+  // Only accept 1-9 (allows leading zeros, e.g., "01")
+  const m = t.match(/^0*([1-9])$/);
   return m ? Number(m[1]) : null;
 }
 

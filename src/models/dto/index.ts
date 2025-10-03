@@ -16,6 +16,9 @@ export * from './device.dto';
 // Chat DTO
 export * from './chat.dto';
 
+// Consultation DTO
+export * from './consultation.dto';
+
 // Message DTO
 export * from './message.dto';
 

@@ -454,11 +454,11 @@ export class ReminderService {
     // Evening option - check if there are active reminders
     const hasActiveEvening = activeReminders[TIME_SLOTS.EVENING] && activeReminders[TIME_SLOTS.EVENING]!.length > 0;
     const eveningIcon = hasActiveEvening ? '❌' : '🌙';
-    text += `3️⃣ ${eveningIcon} Malam (20:00)\n`;
+    text += `3️⃣ ${eveningIcon} Malam (20:00)\n\n`;
 
     // custom time option
-    const customIcon = '🕒';
-    text += `4️⃣ ${customIcon} Waktu Kustom\n\n`;
+    // const customIcon = '🕒';
+    // text += `4️⃣ ${customIcon} Waktu Kustom\n\n`;
 
     text += '💡 *Catatan:* Anda bisa membuat maksimal 3 reminder\n\n';
     text += 'Ketik pilihan Anda (1-4), 9️⃣ untuk kembali ke menu sebelumnya, atau 0️⃣ untuk kembali ke menu utama';

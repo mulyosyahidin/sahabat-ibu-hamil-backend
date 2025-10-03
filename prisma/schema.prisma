@@ -97,6 +97,12 @@ enum BullJobEventType {
   REMOVED
 }
 
+enum ConsultationStatus {
+  WAITING
+  VIEWED
+  ANSWERED
+}
+
 enum AiRequestStatus {
   PENDING
   SUCCESS
@@ -188,6 +194,7 @@ model Chat {
   messages       Message[]
   reminders      Reminder[]
   ai_request_logs AiRequestLog[]
+  consultations   Consultation[]
  
   @@index([wa_number])
   @@index([device_id])
@@ -285,6 +292,25 @@ model ReminderLog {
   @@index([reminder_id])
   @@index([status, scheduled_for])
   @@map("reminder_logs")
+}
+
+model Consultation {
+  id             Int       @id @default(autoincrement())
+  chat_id        Int
+  chat           Chat      @relation(fields: [chat_id], references: [id], onDelete: Cascade)
+
+  message         String?           @db.Text
+  answer          String?           @db.Text
+  status          ConsultationStatus @default(WAITING)
+  viewed_at       DateTime?
+  answered_at     DateTime?
+ 
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  @@index([chat_id])
+  @@index([status])
+  @@map("consultations")
 }
 
 // ===== AI LOGGING TABLES =====

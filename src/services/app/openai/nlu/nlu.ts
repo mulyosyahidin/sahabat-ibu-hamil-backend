@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { z } from "zod";
-import { AiLogger } from "@/services/openai";
+import { AiLogger } from "@/services/app/openai";
 import { AiRequestStatus, PrismaClient } from "@/generated/prisma";
 import { openaiConfig } from "@/config/openai";
 
@@ -177,8 +177,6 @@ export abstract class BaseNLU<T extends BaseNLUResult> {
 
       // Call Responses API
       const res = await this.client.responses.create(requestPayload as any);
-
-      console.log(res);
 
       // Parse response
       const { result, rawText } = this.parseResponse(res);

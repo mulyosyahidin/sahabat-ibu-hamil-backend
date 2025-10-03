@@ -40,6 +40,8 @@ RUN addgroup -g 1001 -S nodejs && \
 WORKDIR /app
 RUN chown -R backend:nodejs /app
 
+COPY public ./public/
+
 # Copy built application from builder stage
 COPY --from=builder --chown=backend:nodejs /app/dist ./dist
 COPY --from=builder --chown=backend:nodejs /app/node_modules ./node_modules

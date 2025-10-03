@@ -1,12 +1,14 @@
-import { MessageContentSource, MessageDirection, MessageType, type Chat } from '@/generated/prisma';
-import { ReminderService } from '@/services';
-import { WhatsAppService } from '@/services/whatsapp';
+import { ConsultationStatus, MessageContentSource, MessageDirection, MessageType, type Chat } from '@/generated/prisma';
+import { ReminderService } from '@/services/app';
+import { WhatsAppService } from '@/services/app/whatsapp';
 import { asJsonObject, getNumericMenuChoice, NotFoundError, runIfOpenAIEnabled } from '@/utils';
 import * as fs from 'fs';
-import { extractName, extractAge, extractMenuChoice, createConversation } from '@/services/openai';
+import { extractName, extractAge, extractMenuChoice, createConversation } from '@/services/app/openai';
 
 import type { PrismaClient } from "@/generated/prisma";
-import type { QueueService } from "@/services/queue.service";
+import type { QueueService } from "@/services/app/queue.service";
+import { getEmbeddingService } from '../openai/embedding/embedding';
+import { rankFaqBySimilarity } from '../openai/embedding/semanticSearch';
 
 export class ChatEngine {
   private prisma: PrismaClient;
@@ -65,9 +67,9 @@ export class ChatEngine {
       // Check if chat already exists for this device and phone number
       let chat = await this.prisma.chat.findFirst({
         where: {
-            device_id: device.id,
-            wa_number: phoneNumber,
-            deleted_at: null,
+          device_id: device.id,
+          wa_number: phoneNumber,
+          deleted_at: null,
         },
       });
 
@@ -87,7 +89,7 @@ export class ChatEngine {
         // Create OpenAI conversation for the new chat
         try {
           const conversation = await createConversation({ chat });
-          
+
           // Update chat with OpenAI conversation ID
           if (conversation) {
             await this.prisma.chat.update({
@@ -186,6 +188,12 @@ export class ChatEngine {
         case 'menu.reminder':
           await this.handleReminderMenu(chat, message);
           break;
+        case 'menu.family':
+          await this.handleFamilyMenu(chat, message);
+          break;
+        case 'menu.faq':
+          await this.handleFaq(chat, message);
+          break;
         case 'menu.profile':
           await this.handleProfileMenu(chat, message);
           break;
@@ -206,6 +214,21 @@ export class ChatEngine {
           break;
         case 'profile.delete_confirmation':
           await this.handleProfileDeleteConfirmation(chat, message);
+          break;
+        case 'faq.answering':
+          await this.handleFaqAnswering(chat, message);
+          break;
+        case 'menu.consultation':
+          await this.handleConsultationMenu(chat, message);
+          break;
+        case 'consultation.asking':
+          await this.handleConsultationAsking(chat, message);
+          break;
+        case 'consultation.viewing':
+          await this.handleConsultationViewing(chat, message);
+          break;
+        case 'consultation.viewing.detail':
+          await this.handleConsultationViewingDetail(chat, message);
           break;
         default:
       }
@@ -338,10 +361,18 @@ export class ChatEngine {
         await this.sendTextResponse(chat, chat.wa_number, this.getReminderMenuText());
         break;
       case 6:
+        await this.updateChatScene(chat.id, 'menu.family');
+        await this.sendTextResponse(chat, chat.wa_number, this.getFamilyMenuText());
         break;
       case 7:
+        await this.updateChatScene(chat.id, 'menu.faq');
+        await this.sendTextResponse(chat, chat.wa_number, this.getFaqMenuText());
         break;
       case 8:
+        await this.updateChatScene(chat.id, 'menu.consultation');
+        await this.sendTextResponse(chat, chat.wa_number, this.getConsultationMenuText());
+        break;
+      case 9:
         await this.updateChatScene(chat.id, 'menu.profile');
         await this.sendTextResponse(chat, chat.wa_number, this.getProfileMenuText());
         break;
@@ -363,6 +394,7 @@ export class ChatEngine {
         id: chatId,
       },
     });
+
     const currentStack = Array.isArray(chat?.scene_stack) ? chat!.scene_stack : ['registrasi'];
     currentStack.push(newScene);
 
@@ -393,9 +425,10 @@ export class ChatEngine {
       '4️⃣ Klarifikasi Mitos\n' +
       '5️⃣ Reminder Harian\n' +
       '6️⃣ Untuk Suami & Keluarga\n' +
-      '7️⃣ FAQ & Konsultasi Bidan\n' +
-      '8️⃣ Profil\n\n' +
-      'Ketik angka pilihan Anda (1-8):'
+      '7️⃣ FAQ\n' +
+      '8️⃣ Konsultasi Bidan\n' +
+      '9️⃣ Profil\n\n' +
+      'Ketik angka pilihan Anda (1-9):'
     );
   }
 
@@ -409,7 +442,7 @@ export class ChatEngine {
       '2️⃣ Penyebab anemia\n' +
       '3️⃣ Gejala anemia\n' +
       '4️⃣ Dampak anemia pada ibu dan bayi\n\n' +
-      'Ketik pilihan Anda (1 - 4) atau 0️⃣ untuk kembali ke menu utama:'
+      'Ketik pilihan Anda (1 - 4) atau 0️⃣ untuk kembali ke menu utama'
     );
   }
 
@@ -420,7 +453,7 @@ export class ChatEngine {
       '1️⃣ Kenapa harus minum TTD?\n' +
       '2️⃣ Cara minum TTD yang benar\n' +
       '3️⃣ Efek samping TTD & cara mengatasinya\n\n' +
-      'Ketik pilihan Anda (1 - 3) atau 0️⃣ untuk kembali ke menu utama:'
+      'Ketik pilihan Anda (1 - 3) atau 0️⃣ untuk kembali ke menu utama'
     );
   }
 
@@ -433,7 +466,7 @@ export class ChatEngine {
       '3️⃣ Cemilan sehat\n' +
       '4️⃣ Kombinasi booster zat besi + vitamin C\n' +
       '5️⃣ Makanan yang perlu dibatasi\n\n' +
-      'Ketik pilihan Anda (1 - 5) atau 0️⃣ untuk kembali ke menu utama:'
+      'Ketik pilihan Anda (1 - 5) atau 0️⃣ untuk kembali ke menu utama'
     );
   }
 
@@ -444,7 +477,7 @@ export class ChatEngine {
       '1️⃣ TTD bikin bayi besar\n' +
       '2️⃣ TTD bikin bayi sulit lahir\n' +
       '3️⃣ Anemia dianggap normal\n\n' +
-      'Ketik pilihan Anda (1 - 3) atau 0️⃣ untuk kembali ke menu utama:'
+      'Ketik pilihan Anda (1 - 3) atau 0️⃣ untuk kembali ke menu utama'
     );
   }
 
@@ -455,7 +488,16 @@ export class ChatEngine {
       '1️⃣ Aktifkan reminder harian\n' +
       '2️⃣ Nonaktifkan reminder\n' +
       '3️⃣ Jadwal reminder saya\n\n' +
-       'Ketik pilihan Anda (1 - 3) atau 0️⃣ untuk kembali ke menu utama:'
+      'Ketik pilihan Anda (1 - 3) atau 0️⃣ untuk kembali ke menu utama'
+    );
+  }
+
+  private getFamilyMenuText(): string {
+    return (
+      '⏰ *UNTUK KELUARGA*\n\n' +
+      '1️⃣ Dukungan suami\n' +
+      '2️⃣ Dukungan keluarga\n\n' +
+      'Ketik pilihan Anda (1 - 2) atau 0️⃣ untuk kembali ke menu utama'
     );
   }
 
@@ -467,7 +509,26 @@ export class ChatEngine {
       '2️⃣ Edit Nama\n' +
       '3️⃣ Edit Usia\n' +
       '4️⃣ Hapus Profil\n\n' +
-      'Ketik pilihan Anda (1 - 4) atau 0️⃣ untuk kembali ke menu utama:'
+      'Ketik pilihan Anda (1 - 4) atau 0️⃣ untuk kembali ke menu utama'
+    );
+  }
+
+  private getFaqMenuText(): string {
+    return (
+      '❓ *Pertanyaan Umum (FAQ)*\n\n' +
+      // 'Menu ini belum tersedia\n\n' +
+      'Silahkan tanyakan pertanyaan mengenai anemia, TTD, gizi dan dukungan keluarga\n\n' +
+      'Ketik 0️⃣ untuk kembali ke menu utama'
+    );
+  }
+
+  private getConsultationMenuText(): string {
+    return (
+      '👩‍⚕ *Konsultasi Bidan*\n\n' +
+      'Pilih opsi berikut:\n\n' +
+      '1️⃣ Konsultasi Baru\n' +
+      '2️⃣ Riwayat Konsultasi\n\n' +
+      'Ketik pilihan Anda (1 - 2) atau 0️⃣ untuk kembali ke menu utama'
     );
   }
 
@@ -806,7 +867,7 @@ export class ChatEngine {
           await this.updateChatScene(chat.id, 'reminder.time_selection');
         } catch (error) {
           console.error('Error generating time selection menu:', error);
-          await this.sendTextResponse(chat, chat.wa_number, 
+          await this.sendTextResponse(chat, chat.wa_number,
             '❌ Maaf, terjadi kesalahan saat menampilkan menu waktu. Silakan coba lagi nanti.'
           );
         }
@@ -827,7 +888,7 @@ export class ChatEngine {
           }
         } catch (error) {
           console.error('Error checking reminders for deactivation:', error);
-          await this.sendTextResponse(chat, chat.wa_number, 
+          await this.sendTextResponse(chat, chat.wa_number,
             '❌ Maaf, terjadi kesalahan saat mengecek reminder Anda. Silakan coba lagi nanti.'
           );
         }
@@ -835,7 +896,7 @@ export class ChatEngine {
       case 3: // Check my reminders
         try {
           const reminders = await this.reminderService.getChatReminders(chat.id);
-          
+
           if (reminders.length === 0) {
             const noRemindersText = this.reminderService.generateNoRemindersToCheckText();
             await this.sendTextResponse(chat, chat.wa_number, noRemindersText);
@@ -845,7 +906,7 @@ export class ChatEngine {
           }
         } catch (error) {
           console.error('Error fetching reminders:', error);
-          await this.sendTextResponse(chat, chat.wa_number, 
+          await this.sendTextResponse(chat, chat.wa_number,
             '❌ Maaf, terjadi kesalahan saat mengambil data reminder Anda. Silakan coba lagi nanti.'
           );
         }
@@ -887,7 +948,7 @@ export class ChatEngine {
           // Check if reminder already exists for this time slot
           const exists = await this.reminderService.hasReminderForTimeSlot(chat.id, timeSlot);
           if (exists) {
-            await this.sendTextResponse(chat, chat.wa_number, 
+            await this.sendTextResponse(chat, chat.wa_number,
               `❌ Reminder untuk waktu ${timeSlot} sudah ada.\n\nSilakan pilih waktu lain atau kembali ke menu sebelumnya dengan mengetik 9️⃣`
             );
             return;
@@ -895,7 +956,7 @@ export class ChatEngine {
 
           // Create reminder for the selected time slot
           await this.reminderService.createReminderForTimeSlot(chat.id, timeSlot);
-          
+
           // Generate success message
           const successMessage = this.reminderService.generateReminderCreatedMessage(timeSlot);
           await this.sendTextResponse(chat, chat.wa_number, successMessage);
@@ -904,12 +965,12 @@ export class ChatEngine {
           await this.updateChatScene(chat.id, 'menu.reminder');
         } catch (error) {
           console.error('Error creating reminder:', error);
-          await this.sendTextResponse(chat, chat.wa_number, 
+          await this.sendTextResponse(chat, chat.wa_number,
             '❌ Maaf, terjadi kesalahan saat membuat reminder. Silakan coba lagi nanti.'
           );
         }
         break;
-      case 4:
+      case 444:
         await this.updateChatScene(chat.id, 'reminder.custom_time');
         await this.sendTextResponse(chat, chat.wa_number, this.reminderService.generateCustomTimePrompt());
         break;
@@ -938,7 +999,7 @@ export class ChatEngine {
     try {
       const messageText = (message.message?.conversation || message.body || message.text || message.message.extendedTextMessage?.text || '').trim();
       const choice = parseInt(messageText);
-  
+
       // Handle navigation options
       if (choice === 9) {
         await this.updateChatScene(chat.id, 'menu.reminder');
@@ -946,44 +1007,82 @@ export class ChatEngine {
         await this.sendTextResponse(chat, chat.wa_number, reminderMenu);
         return;
       }
-  
+
       if (choice === 0) {
         await this.updateChatScene(chat.id, 'menu.root');
         const mainMenu = this.getMainMenuText();
         await this.sendTextResponse(chat, chat.wa_number, mainMenu);
         return;
       }
-  
+
       // Validate choice
       if (isNaN(choice) || choice < 1) {
         await this.sendTextResponse(chat, chat.wa_number, '❌ Pilihan tidak valid. Silakan pilih nomor yang tersedia.');
         return;
       }
-  
+
       // Get reminder for the choice
       const reminder = await this.reminderService.getReminderByDeactivationChoice(chat.id, choice);
-      
+
       if (!reminder) {
-        await this.sendTextResponse(chat, chat.wa_number,'❌ Pilihan tidak valid. Silakan pilih nomor yang tersedia.');
+        await this.sendTextResponse(chat, chat.wa_number, '❌ Pilihan tidak valid. Silakan pilih nomor yang tersedia.');
         return;
       }
-  
+
       // Deactivate the specific reminder
       await this.reminderService.deactivateReminder(reminder.id);
-      
+
       // Generate success message
       const successMessage = this.reminderService.generateReminderDeactivatedMessage(reminder.time_of_day, reminder.custom_time);
       await this.sendTextResponse(chat, chat.wa_number, successMessage);
-  
+
       // Update scene back to reminder menu
       await this.updateChatScene(chat.id, 'menu.reminder');
-  
+
     } catch (error) {
       console.error('Error handling reminder deactivation selection:', error);
       await this.sendTextResponse(chat, chat.wa_number, '❌ Terjadi kesalahan saat menonaktifkan reminder. Silakan coba lagi.');
-      
+
       // Return to reminder menu on error
       await this.updateChatScene(chat.id, 'menu.reminder');
+    }
+  }
+
+  private async handleFamilyMenu(chat: Chat, message: any): Promise<void> {
+    const messageText = (message.message?.conversation || message.body || message.text || message.message.extendedTextMessage.text || '').trim();
+
+    const choice = parseInt(messageText, 10);
+    let responseText = '';
+
+    switch (choice) {
+      case 1:
+        responseText = (
+          '👨‍👦 *DUKUNGAN SUAMI*\n\n' +
+          'Suami dapat mengingatkan jadwal minum TTD, membantu menyiapkan makanan bergizi, dan memberi semangat\n\n' +
+          'Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama'
+        );
+        await this.sendTextResponse(chat, chat.wa_number, responseText);
+        break;
+      case 2:
+        responseText = (
+          '👨‍👨‍👧‍👧 *DUKUNGAN KELUARGA*\n\n' +
+          'Keluarga bisa mendukung dengan membantu pekerjaan rumah, memberi makanan sehat, dan mengingatkan jadwal kontrol.\n\n' +
+          'Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama'
+        );
+        await this.sendTextResponse(chat, chat.wa_number, responseText);
+        break;
+      case 9:
+        await this.sendTextResponse(chat, chat.wa_number, this.getFamilyMenuText());
+        break;
+      case 0:
+        await this.updateChatScene(chat.id, 'menu.root');
+        await this.sendMainMenuOption(chat);
+        break;
+      default:
+        await this.sendTextResponse(chat, chat.wa_number, `Pilihan tidak valid.`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await this.sendTextResponse(chat, chat.wa_number, 'Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama');
+        break;
     }
   }
 
@@ -1009,7 +1108,7 @@ export class ChatEngine {
         break;
       case 2:
         // Edit Nama - Request new name input
-        await this.sendTextResponse(chat, chat.wa_number, 
+        await this.sendTextResponse(chat, chat.wa_number,
           '✏️ *EDIT NAMA*\n\n' +
           'Silakan masukkan nama baru Anda:'
         );
@@ -1018,7 +1117,7 @@ export class ChatEngine {
         break;
       case 3:
         // Edit Usia - Request new age input
-        await this.sendTextResponse(chat, chat.wa_number, 
+        await this.sendTextResponse(chat, chat.wa_number,
           '✏️ *EDIT USIA*\n\n' +
           'Silakan masukkan usia baru Anda:'
         );
@@ -1028,7 +1127,7 @@ export class ChatEngine {
       case 4:
         // Delete Profile - Show confirmation dialog
         await this.updateChatScene(chat.id, 'profile.delete_confirmation');
-        await this.sendTextResponse(chat, chat.wa_number, 
+        await this.sendTextResponse(chat, chat.wa_number,
           '🗑️ *HAPUS PROFIL*\n\n' +
           '⚠️ Apakah Anda yakin ingin menghapus profil ini?\n\n' +
           'Dengan menghapus profil, semua data percakapan dan pengaturan akan dihapus.\n\n' +
@@ -1057,38 +1156,38 @@ export class ChatEngine {
    */
   private async handleProfileEditName(chat: Chat, message: any): Promise<void> {
     const messageText = (message.message?.conversation || message.body || message.text || message.message.extendedTextMessage.text || '').trim();
-  
+
     // Use NLU to validate the name input
     const { valid, name } = await runIfOpenAIEnabled(
       () => extractName(
-          messageText,
-          chat,
-        ),
+        messageText,
+        chat,
+      ),
       () => ({ valid: true, name: messageText })
     );
-  
+
     if (!valid) {
-      await this.sendTextResponse(chat, chat.wa_number, 
+      await this.sendTextResponse(chat, chat.wa_number,
         '❌ Nama yang Anda masukkan tidak valid. Harap masukkan nama yang benar.\n\n' +
         'Contoh: "Siti", "Budi Santoso", "Maria"\n\n' +
         'Silakan coba lagi:'
       );
       return;
     }
-  
+
     // Update the name in database
     await this.prisma.chat.update({
       where: { id: chat.id },
       data: { name: name },
     });
-  
+
     // Send success message
-    await this.sendTextResponse(chat, chat.wa_number, 
+    await this.sendTextResponse(chat, chat.wa_number,
       `✅ *NAMA BERHASIL DIPERBARUI*\n\n` +
       `Nama baru Anda: ${name}\n\n` +
       'Ketik 9️⃣ untuk kembali ke menu profil, 0️⃣ untuk kembali ke menu utama'
     );
-  
+
     // Return to profile menu
     await this.updateChatScene(chat.id, 'menu.profile');
   }
@@ -1098,7 +1197,7 @@ export class ChatEngine {
    */
   private async handleProfileEditAge(chat: Chat, message: any): Promise<void> {
     const messageText = (message.message?.conversation || message.body || message.text || message.message.extendedTextMessage.text || '').trim();
-  
+
     // Use NLU to validate the age input
     const { valid, age } = await runIfOpenAIEnabled(
       () => extractAge(
@@ -1107,36 +1206,36 @@ export class ChatEngine {
       ),
       () => ({ valid: true, age: parseInt(messageText, 10) })
     );
-  
+
     if (!valid) {
-      await this.sendTextResponse(chat, chat.wa_number, 
+      await this.sendTextResponse(chat, chat.wa_number,
         '❌ Usia yang Anda masukkan tidak valid. Harap masukkan usia yang benar.\n\n' +
         'Contoh: "25", "30 tahun", "35"\n\n' +
         'Silakan coba lagi:'
       );
       return;
     }
-  
+
     // Update the age in database
     await this.prisma.chat.update({
       where: { id: chat.id },
       data: { age: age },
     });
-  
+
     // Send success message
-    await this.sendTextResponse(chat, chat.wa_number, 
+    await this.sendTextResponse(chat, chat.wa_number,
       `✅ *USIA BERHASIL DIPERBARUI*\n\n` +
       `Usia baru Anda: ${age} tahun\n\n` +
       'Ketik 9️⃣ untuk kembali ke menu profil, 0️⃣ untuk kembali ke menu utama'
     );
-  
-    // Return to profile menu
-   await this.updateChatScene(chat.id, 'menu.profile');
- }
 
- /**
-   * Send response message via WhatsApp
-   */
+    // Return to profile menu
+    await this.updateChatScene(chat.id, 'menu.profile');
+  }
+
+  /**
+    * Send response message via WhatsApp
+    */
   private async sendTextResponse(chat: Chat, sendTo: string, text: string): Promise<void> {
     try {
       // Add country code if not present
@@ -1265,12 +1364,12 @@ export class ChatEngine {
           this.updateChatScene(chat.id, 'deleted');
           await this.prisma.chat.update({
             where: { id: chat.id },
-            data: { 
+            data: {
               deleted_at: new Date(),
             },
           });
 
-          await this.sendTextResponse(chat, chat.wa_number, 
+          await this.sendTextResponse(chat, chat.wa_number,
             '✅ *PROFIL BERHASIL DIHAPUS*\n\n' +
             'Profil Anda telah dihapus dari sistem.\n\n' +
             'Terima kasih telah menggunakan layanan Sahabat Ibu Hamil. 🙏'
@@ -1279,10 +1378,10 @@ export class ChatEngine {
           console.log(`Profile deleted for chat ID: ${chat.id}`);
         } catch (error) {
           console.error('Error deleting profile:', error);
-          await this.sendTextResponse(chat, chat.wa_number, 
+          await this.sendTextResponse(chat, chat.wa_number,
             '❌ Terjadi kesalahan saat menghapus profil. Silakan coba lagi.'
           );
-          
+
           // Return to profile menu on error
           await this.updateChatScene(chat.id, 'menu.profile');
           await this.sendTextResponse(chat, chat.wa_number, this.getProfileMenuText());
@@ -1294,7 +1393,7 @@ export class ChatEngine {
         await this.sendTextResponse(chat, chat.wa_number, this.getProfileMenuText());
         break;
       default:
-        await this.sendTextResponse(chat, chat.wa_number, 
+        await this.sendTextResponse(chat, chat.wa_number,
           '❌ Pilihan tidak valid.\n\n' +
           '1️⃣ Ya, hapus profil\n' +
           '9️⃣ Batal\n\n' +
@@ -1304,7 +1403,7 @@ export class ChatEngine {
     }
   }
 
-/**
+  /**
    * Handle custom time input for reminders
    */
   private async handleReminderCustomTime(chat: Chat, message: any): Promise<void> {
@@ -1327,9 +1426,9 @@ export class ChatEngine {
     // Validate and process custom time
     try {
       const validation = this.reminderService.validateCustomTime(messageText);
-      
+
       if (!validation.valid) {
-        await this.sendTextResponse(chat, chat.wa_number, 
+        await this.sendTextResponse(chat, chat.wa_number,
           `❌ ${validation.error}\n\n` +
           'Silakan masukkan waktu dengan format yang benar (HH:mm).\n\n' +
           'Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama'
@@ -1339,7 +1438,7 @@ export class ChatEngine {
 
       // Create custom time reminder
       await this.reminderService.createCustomTimeReminder(chat.id, validation.time!);
-      
+
       // Send success message
       const successMessage = this.reminderService.generateCustomReminderCreatedMessage(validation.time!);
       await this.sendTextResponse(chat, chat.wa_number, successMessage);
@@ -1349,21 +1448,230 @@ export class ChatEngine {
 
     } catch (error) {
       console.error('Error creating custom time reminder:', error);
-      
+
       let errorMessage = '❌ Terjadi kesalahan saat membuat reminder. Silakan coba lagi.';
-      
+
       // Handle specific error messages
       if (error instanceof Error) {
         if (error.message.includes('sudah memiliki reminder kustom aktif')) {
           errorMessage = `❌ ${error.message}`;
         }
       }
-      
-      await this.sendTextResponse(chat, chat.wa_number, 
+
+      await this.sendTextResponse(chat, chat.wa_number,
         `${errorMessage}\n\n` +
         'Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama'
       );
     }
   }
 
+  private async handleFaq(chat: Chat, message: any): Promise<void> {
+    const messageText = (message.message?.conversation || message.body || message.text || message.message.extendedTextMessage.text || '').trim();
+    const choice = parseInt(messageText, 10);
+
+    if (choice == 0) {
+      await this.updateChatScene(chat.id, 'menu.root');
+      await this.sendMainMenuOption(chat);
+    }
+    else {
+      await this.updateChatScene(chat.id, 'faq.answering');
+      await this.handleFaqAnswering(chat, message);
+    }
+  }
+
+  private async handleFaqAnswering(chat: Chat, message: any): Promise<void> {
+    const messageText = (message.message?.conversation || message.body || message.text || message.message.extendedTextMessage.text || '').trim();
+
+    if (messageText == 0) {
+      await this.updateChatScene(chat.id, 'menu.root');
+      await this.sendMainMenuOption(chat);
+      return;
+    }
+
+    if (!messageText) {
+      this.sendTextResponse(chat, chat.wa_number, "Harap masukkan pesan Anda");
+      return;
+    }
+
+    const embedSvc = getEmbeddingService();
+
+    const userEmb = await embedSvc.embedUserText(messageText, {
+      chatId: chat.id,
+      deviceId: chat.device_id
+    }, {
+
+    });
+
+    if (!userEmb.ok) {
+      await this.sendTextResponse(chat, chat.wa_number, "Maaf, sistem sedang bermasalah saat memproses pertanyaan.");
+      return;
+    }
+
+    const { candidates } = rankFaqBySimilarity(userEmb.vector, { topK: 3, threshold: 0.6 });
+
+    const [best] = candidates ?? [];
+    if (!best) {
+      await this.sendTextResponse(chat, chat.wa_number, "Maaf, saya tidak mempunyai jawaban untuk pertanyaan tersebut. Coba pertanyaan lainnya.\n\nKetik 0️⃣ untuk kembali ke menu utama");
+      return;
+    }
+
+    await this.sendTextResponse(chat, chat.wa_number, best.jawaban);
+    await this.sendTextResponse(chat, chat.wa_number, "Apakah ada yang lain yang bisa saya bantu?\n\nKetik 0️⃣ untuk kembali ke menu utama");
+  }
+
+  private async handleConsultationMenu(chat: Chat, message: any): Promise<void> {
+    const messageText = (message.message?.conversation || message.body || message.text || message.message.extendedTextMessage.text || '').trim();
+    const choice = parseInt(messageText, 10);
+
+    switch (choice) {
+      case 1:
+        let consultationHistories = await this.prisma.consultation.findMany({
+          where: {
+            chat_id: chat.id
+          }
+        });
+
+        let statuses = consultationHistories.map((item) => item.status);
+        let activeStatuses = statuses.filter((item) => item === ConsultationStatus.WAITING);
+        if (activeStatuses.length > 0) {
+          await this.sendTextResponse(chat, chat.wa_number, "Anda masih memiliki konsultasi yang belum dijawab. Silahkan menunggu jawaban bidan terlebih dahulu.\n\nKetik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama");
+          return;
+        }
+
+        await this.updateChatScene(chat.id, 'consultation.asking');
+        await this.sendTextResponse(chat, chat.wa_number, "Silakan tanyakan pertanyaan Anda ke bidan. Berikan pertanyaan secara jelas dan detail.\n\nPertanyaan Anda:");
+        break;
+      case 2:
+        await this.updateChatScene(chat.id, 'consultation.viewing');
+
+        let consultations = await this.prisma.consultation.findMany({
+          where: {
+            chat_id: chat.id,
+          }
+        });
+
+        if (consultations.length == 0) {
+          await this.sendTextResponse(chat, chat.wa_number, "Anda belum memiliki konsultasi yang dilihat. Silahkan tanyakan pertanyaan ke bidan.\n\nKetik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama");
+          return;
+        }
+
+        let answerText = '';
+
+        answerText += "🙋‍♀️ Pertanyaan Anda:\n\n";
+
+        let consultationText = consultations.map((item) => {
+          let icon = item.status === ConsultationStatus.WAITING ? '⏰' : '✅';
+          return `${icon} [P${item.id}] ${item.created_at.toLocaleString()}`;
+        }).join('\n\n');
+
+        answerText += consultationText;
+        answerText += "\n\nKetik ID konsultasi yang ingin dilihat detailnya, contoh: *P1*, *P2*, dst.\n\nKetik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama";
+
+        await this.sendTextResponse(chat, chat.wa_number, answerText);
+        await this.updateChatScene(chat.id, 'consultation.viewing.detail');
+        break;
+      case 9:
+        await this.updateChatScene(chat.id, 'menu.consultation');
+        await this.sendTextResponse(chat, chat.wa_number, this.getConsultationMenuText());
+        break;
+      case 0:
+        await this.updateChatScene(chat.id, 'menu.root');
+        await this.sendMainMenuOption(chat);
+        break;
+      default:
+        await this.sendTextResponse(chat, chat.wa_number, "Pilihan tidak valid. Silakan pilih opsi 1 - 2 atau 0️⃣ untuk kembali ke menu utama");
+        break;
+    }
+  }
+
+  private async handleConsultationAsking(chat: Chat, message: any): Promise<void> {
+    const messageText = (message.message?.conversation || message.body || message.text || message.message.extendedTextMessage.text || '').trim();
+    if (!messageText) {
+      await this.sendTextResponse(chat, chat.wa_number, "Harap masukkan pesan Anda");
+      return;
+    }
+
+    await this.prisma.consultation.create({
+      data: {
+        chat_id: chat.id,
+        status: ConsultationStatus.WAITING,
+        message: messageText,
+      }
+    });
+
+    await this.sendTextResponse(chat, chat.wa_number, "Terima kasih atas pertanyaan Anda. Bidan akan segera memberikan jawaban.\n\nKetik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama");
+    await this.updateChatScene(chat.id, 'menu.consultation');
+  }
+
+  private async handleConsultationViewing(chat: Chat, message: any): Promise<void> {
+    const messageText = (message.message?.conversation || message.body || message.text || message.message.extendedTextMessage.text || '').trim();
+    if (!messageText) {
+      await this.sendTextResponse(chat, chat.wa_number, "Harap masukkan pesan Anda");
+      return;
+    }
+
+    let choice = parseInt(messageText, 10);
+    if (choice == 9) {
+      await this.updateChatScene(chat.id, 'menu.consultation');
+      await this.sendTextResponse(chat, chat.wa_number, this.getConsultationMenuText());
+      return;
+    }
+
+    if (choice == 0) {
+      await this.updateChatScene(chat.id, 'menu.root');
+      await this.sendMainMenuOption(chat);
+      return;
+    }
+  }
+
+  private async handleConsultationViewingDetail(chat: Chat, message: any): Promise<void> {
+    let messageText = (message.message?.conversation || message.body || message.text || message.message.extendedTextMessage.text || '').trim();
+    if (!messageText) {
+      await this.sendTextResponse(chat, chat.wa_number, "Harap masukkan pesan Anda");
+      return;
+    }
+
+    if (messageText == '9') {
+      await this.updateChatScene(chat.id, 'menu.consultation');
+      await this.sendTextResponse(chat, chat.wa_number, this.getConsultationMenuText());
+      return;
+    }
+
+    if (messageText == '0') {
+      await this.updateChatScene(chat.id, 'menu.root');
+      await this.sendMainMenuOption(chat);
+      return;
+    }
+
+    messageText = messageText.trim().toUpperCase();
+
+    if (!/^P\d+$/.test(messageText)) {
+      await this.sendTextResponse(chat, chat.wa_number, "ID konsultasi tidak valid. Silakan coba lagi.\n\nKetik ID konsultasi yang ingin dilihat detailnya, contoh: *P1*, *P2*, dst.\n\nKetik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama");
+      return;
+    }
+
+    let consultationId = messageText.replace('P', '');
+    let consultation = await this.prisma.consultation.findFirst({
+      where: {
+        id: parseInt(consultationId, 10),
+        chat_id: chat.id,
+      }
+    });
+
+    if (!consultation) {
+      await this.sendTextResponse(chat, chat.wa_number, "ID konsultasi tidak valid. Silakan coba lagi.\n\nKetik ID konsultasi yang ingin dilihat detailnya, contoh: *P1*, *P2*, dst.\n\nKetik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama");
+      return;
+    }
+
+    let answerText = '';
+    answerText += `⏰ Waktu: ${consultation.created_at.toLocaleString()}\n`
+    answerText += `❔ Status: ${consultation.status == ConsultationStatus.WAITING ? 'Menunggu Jawaban' : (consultation.status == ConsultationStatus.VIEWED ? 'Dilihat' : 'Dijawab')}\n`;
+    answerText += `🙋‍♀️ Pertanyaan Anda:\n\n${consultation.message}\n\n`;
+    if (consultation.status == ConsultationStatus.ANSWERED) {
+      answerText += `🙋‍♂️ Jawaban Bidan:\n\n${consultation.answer || 'Belum ada jawaban'}\n\n`;
+    }
+    answerText += "Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama";
+
+    await this.sendTextResponse(chat, chat.wa_number, answerText);
+  }
 }

@@ -9,6 +9,7 @@
  */
 
 export * from './auth.route';
+export * from './consultation.route';
 export * from './device.route';
 export * from './welcome.route';
 export * from './router';

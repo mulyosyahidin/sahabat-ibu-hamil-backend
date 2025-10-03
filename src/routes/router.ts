@@ -9,6 +9,7 @@
 import { Router } from 'express';
 import welcomeRoutes from './welcome.route';
 import authRoutes from './auth.route';
+import consultationRoutes from './consultation.route';
 import deviceRoutes from './device.route';
 
 // Create main router instance
@@ -19,6 +20,9 @@ router.use('/', welcomeRoutes);
 
 // Mount auth routes at /auth path
 router.use('/auth', authRoutes);
+
+// Mount consultation routes at /consultations path
+router.use('/consultations', consultationRoutes);
 
 // Mount device routes at /devices path
 router.use('/devices', deviceRoutes);

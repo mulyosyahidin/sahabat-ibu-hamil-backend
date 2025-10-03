@@ -10,7 +10,7 @@ import path from 'path';
 import fs from 'fs';
 import type { PrismaClient } from '@prisma/client';
 import { NotFoundError } from '@/utils';
-import { ChatEngine } from '@/services/chat-engine';
+import { ChatEngine } from '@/services/app/chat-engine';
 import { DeviceStatus } from '@/generated/prisma';
 
 export class WhatsAppService {
@@ -18,15 +18,13 @@ export class WhatsAppService {
   private sessions: Map<string, WASocket> = new Map();
   private sessionsDir: string;
   private prisma: PrismaClient;
-  private ChatEngine!: ChatEngine; // Using definite assignment assertion since it's set via setChatEngine()
+  private ChatEngine!: ChatEngine;
 
   constructor(io: SocketIOServer, prisma: PrismaClient) {
     this.io = io;
     this.sessionsDir = path.join(process.cwd(), 'sessions');
     this.prisma = prisma;
-    // ChatEngine will be set later to avoid circular dependency
 
-    // Create sessions directory if it doesn't exist
     if (!fs.existsSync(this.sessionsDir)) {
       fs.mkdirSync(this.sessionsDir, { recursive: true });
     }

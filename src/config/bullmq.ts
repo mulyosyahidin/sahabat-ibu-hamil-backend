@@ -2,7 +2,7 @@ import { Queue, Worker, QueueEvents } from 'bullmq';
 import { createBullMQRedisConnection } from './redis';
 import type { PrismaClient } from '@/generated/prisma';
 import { appInstanceManager } from '@/utils/app-instance.util';
-import { WhatsAppService } from '@/services/whatsapp/whatsapp.service';
+import { WhatsAppService } from '@/services/app/whatsapp/whatsapp.service';
 
 // Bull MQ configuration
 export const QUEUE_NAMES = {
@@ -67,6 +67,17 @@ export const createReminderWorker = (prisma: PrismaClient) => {
       console.log(`Processing reminder job ${job.id} for reminder ${reminderId}`);
       
       try {
+        // check is reminder exist
+        const reminder = await prisma.reminder.findUnique({
+          where: { id: reminderId },
+        });
+
+        if (!reminder) {
+          console.error(`Reminder with id ${reminderId} not found`);
+          
+          return;
+        }
+
         // Update ReminderJob status to active
         await prisma.reminderJob.update({
           where: { id: job.id! },

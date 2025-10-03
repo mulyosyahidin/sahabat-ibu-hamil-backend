@@ -12,14 +12,15 @@ import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import router from './routes/router';
-import { WhatsAppService } from './services/whatsapp/whatsapp.service';
+import { WhatsAppService } from './services/app/whatsapp/whatsapp.service';
 import { DeviceService } from './services/device.service';
-import { SocketService } from './services/socket/socket.service';
+import { SocketService } from './services/app/socket/socket.service';
 import { PrismaClient } from './generated/prisma';
 import { appInstanceManager } from './utils/app-instance.util';
-import { ChatEngine } from './services/chat-engine/chat.engine';
-import { QueueService } from './services/queue.service';
-import { HealthCheckService } from './services/health-check.service';
+import { ChatEngine } from './services/app/chat-engine/chat.engine';
+import { QueueService } from './services/app/queue.service';
+import { HealthCheckService } from './services/app/health-check.service';
+import { ConsultationService } from './services';
 
 const __dirname = (() => {
   try {
@@ -128,6 +129,7 @@ export const createApp = (port: number = 3000): {
   const queueService = new QueueService(prisma);
   const chatEngine = new ChatEngine(prisma, whatsappService, queueService);
   const healthCheckService = new HealthCheckService(prisma);
+  const consultationService = new ConsultationService(prisma);
   
   // Set ChatEngine in WhatsAppService to avoid circular dependency
   whatsappService.setChatEngine(chatEngine);
@@ -137,6 +139,7 @@ export const createApp = (port: number = 3000): {
   appInstanceManager.setDeviceService(deviceService);
   appInstanceManager.setChatEngine(chatEngine);
   appInstanceManager.setHealthCheckService(healthCheckService);
+  appInstanceManager.setConsultationService(consultationService);
   
   // Set up middleware and routes
   initializeMiddlewares(app);

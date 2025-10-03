@@ -1,8 +1,8 @@
 import { PrismaClient } from '@/generated/prisma';
-import type { DeviceService } from '@/services';
-import type { ChatEngine } from '@/services/chat-engine';
-import type { WhatsAppService } from '@/services/whatsapp';
-import type { HealthCheckService } from '@/services/health-check.service';
+import type { ConsultationService, DeviceService } from '@/services';
+import type { ChatEngine } from '@/services/app/chat-engine';
+import type { WhatsAppService } from '@/services/app/whatsapp';
+import type { HealthCheckService } from '@/services/app/health-check.service';
 
 /**
  * Global app instance manager
@@ -12,6 +12,7 @@ class AppInstanceManager {
   private static instance: AppInstanceManager;
   private whatsappService: WhatsAppService | null = null;
   private deviceService: DeviceService | null = null;
+  private consultationService: ConsultationService | null = null;
   private chatEngine: ChatEngine | null = null;
   private healthCheckService: HealthCheckService | null = null;
 
@@ -112,6 +113,27 @@ class AppInstanceManager {
    */
   isHealthCheckServiceInitialized(): boolean {
     return this.healthCheckService !== null;
+  }
+
+  /**
+   * Set Consultation service instance
+   */
+  setConsultationService(service: ConsultationService): void {
+    this.consultationService = service;
+  }
+
+  /**
+   * Get Consultation service instance
+   */
+  getConsultationService(): ConsultationService | null {
+    return this.consultationService;
+  }
+
+  /**
+   * Check if Consultation service is initialized
+   */
+  isConsultationServiceInitialized(): boolean {
+    return this.consultationService !== null;
   }
 }
 

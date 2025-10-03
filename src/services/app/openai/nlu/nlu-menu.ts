@@ -12,7 +12,7 @@ interface MenuResult extends BaseNLUResult {
 const MenuChoiceSchema = z.object({
   valid: z.boolean(),
   // NOTE: set 1..8 karena di prompt ada opsi 8: Profil
-  choice: z.number().int().min(1).max(8).nullable()
+  choice: z.number().int().min(1).max(9).nullable()
 });
 
 class MenuNLU extends BaseNLU<MenuResult> {
@@ -43,8 +43,9 @@ DAFTAR MENU:
 4: Klarifikasi Mitos
 5: Reminder Harian
 6: Untuk Suami & Keluarga
-7: FAQ & Konsultasi Bidan
-8: Profil
+7: FAQ
+8: Konsultasi Bidan
+9: Profil
 
 ATURAN:
 - Terima bentuk angka ("1", "nomor 5", "no enam", "dua", "tujuh").
@@ -55,8 +56,9 @@ ATURAN:
   • 4: "mitos", "klarifikasi mitos", "fakta vs mitos", "hoax", "informasi mitos"
   • 5: "reminder", "pengingat", "notifikasi", "ingatkan", "jadwal minum"
   • 6: "suami", "keluarga", "untuk suami", "peran suami"
-  • 7: "faq", "konsultasi", "bidan", "tanya bidan", "pertanyaan umum"
-  • 8: "profil", "edit profil", "ubah nama", "ubah umur", "informasi profil", "siapa saya", "data saya"
+  • 7: "faq", "tanya", "pertanyaan umum"
+  • 8: "konsultasi", "bidan", "tanya bidan", "pertanyaan bidan"
+  • 9: "profil", "edit profil", "ubah nama", "ubah umur", "informasi profil", "siapa saya", "data saya"
 
 - Jika jelas mengarah ke salah satu menu → valid:true, choice=nomornya.
 - Jika ambigu/tidak nyambung → valid:false, choice:null.
