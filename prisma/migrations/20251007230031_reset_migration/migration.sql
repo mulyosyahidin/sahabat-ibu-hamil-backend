@@ -76,7 +76,8 @@ CREATE TABLE `reminders` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `chat_id` INTEGER NOT NULL,
     `active` BOOLEAN NOT NULL DEFAULT true,
-    `time_of_day` ENUM('MORNING', 'AFTERNOON', 'EVENING') NOT NULL,
+    `time_of_day` ENUM('MORNING', 'AFTERNOON', 'EVENING', 'CUSTOM') NOT NULL,
+    `custom_time` VARCHAR(8) NULL,
     `tz` VARCHAR(50) NOT NULL DEFAULT 'Asia/Jakarta',
     `last_run_at` DATETIME(3) NULL,
     `next_run_message` TEXT NULL,
@@ -85,6 +86,62 @@ CREATE TABLE `reminders` (
 
     INDEX `reminders_chat_id_idx`(`chat_id`),
     UNIQUE INDEX `reminders_chat_id_time_of_day_key`(`chat_id`, `time_of_day`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `reminder_jobs` (
+    `id` VARCHAR(191) NOT NULL,
+    `reminder_id` INTEGER NOT NULL,
+    `status` ENUM('WAITING', 'DELAYED', 'ACTIVE', 'COMPLETED', 'FAILED', 'PAUSED', 'STALLED', 'RETRY', 'REMOVED') NOT NULL DEFAULT 'WAITING',
+    `scheduled_for` DATETIME(3) NOT NULL,
+    `started_at` DATETIME(3) NULL,
+    `completed_at` DATETIME(3) NULL,
+    `failed_at` DATETIME(3) NULL,
+    `message` TEXT NULL,
+    `attempts` INTEGER NOT NULL DEFAULT 0,
+    `max_attempts` INTEGER NOT NULL DEFAULT 3,
+    `error_message` TEXT NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    INDEX `reminder_jobs_reminder_id_idx`(`reminder_id`),
+    INDEX `reminder_jobs_status_scheduled_for_idx`(`status`, `scheduled_for`),
+    INDEX `reminder_jobs_scheduled_for_idx`(`scheduled_for`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `reminder_logs` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `reminder_id` INTEGER NOT NULL,
+    `status` ENUM('SCHEDULED', 'DISPATCHED', 'STARTED', 'SENT', 'SKIPPED', 'FAILED') NOT NULL DEFAULT 'SCHEDULED',
+    `scheduled_for` DATETIME(3) NOT NULL,
+    `executed_at` DATETIME(3) NULL,
+    `message_sent` TEXT NULL,
+    `error_message` TEXT NULL,
+    `job_id` VARCHAR(191) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `reminder_logs_reminder_id_idx`(`reminder_id`),
+    INDEX `reminder_logs_status_scheduled_for_idx`(`status`, `scheduled_for`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `consultations` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `chat_id` INTEGER NOT NULL,
+    `message` TEXT NULL,
+    `answer` TEXT NULL,
+    `status` ENUM('WAITING', 'VIEWED', 'ANSWERED') NOT NULL DEFAULT 'WAITING',
+    `viewed_at` DATETIME(3) NULL,
+    `answered_at` DATETIME(3) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    INDEX `consultations_chat_id_idx`(`chat_id`),
+    INDEX `consultations_status_idx`(`status`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -153,6 +210,15 @@ ALTER TABLE `messages` ADD CONSTRAINT `messages_chat_id_fkey` FOREIGN KEY (`chat
 
 -- AddForeignKey
 ALTER TABLE `reminders` ADD CONSTRAINT `reminders_chat_id_fkey` FOREIGN KEY (`chat_id`) REFERENCES `chats`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `reminder_jobs` ADD CONSTRAINT `reminder_jobs_reminder_id_fkey` FOREIGN KEY (`reminder_id`) REFERENCES `reminders`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `reminder_logs` ADD CONSTRAINT `reminder_logs_reminder_id_fkey` FOREIGN KEY (`reminder_id`) REFERENCES `reminders`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `consultations` ADD CONSTRAINT `consultations_chat_id_fkey` FOREIGN KEY (`chat_id`) REFERENCES `chats`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `ai_request_logs` ADD CONSTRAINT `ai_request_logs_device_id_fkey` FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
