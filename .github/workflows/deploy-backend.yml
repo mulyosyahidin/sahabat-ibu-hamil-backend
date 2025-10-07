@@ -40,7 +40,10 @@ jobs:
               echo "📁 Directory tidak ditemukan, membuat direktori dan clone repository..."
               mkdir -p ${{ vars.APP_PATH }}
               cd ${{ vars.APP_PATH }}
-              git clone ${{ github.server_url }}/${{ github.repository }} .
+              git clone git@github.com:${{ github.repository }}.git .
+              
+              # Pastikan checkout ke branch development setelah clone
+              git checkout development
             else
               echo "📁 Directory sudah ada, melakukan git pull..."
               cd ${{ vars.APP_PATH }}
