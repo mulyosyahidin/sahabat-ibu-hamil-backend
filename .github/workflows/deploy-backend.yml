@@ -1,80 +1,98 @@
-name: Deploy Backend to Server
+name: Deploy Backend to VPS
 
-# Trigger workflow saat ada push ke branch development
 on:
   push:
     branches:
       - development
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
-  deploy:
-    name: Deploy Backend
+  build_and_push:
+    name: Build and Push Docker Image
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
-        
-      - name: Setup SSH
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/sahabat-ibu-hamil-backend:latest
+            ghcr.io/${{ github.repository_owner }}/sahabat-ibu-hamil-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    needs: build_and_push
+    
+    steps:
+      - name: Setup SSH Key
         run: |
-          # Buat direktori .ssh dan set permission
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          
-          # Simpan private key SSH ke file
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          
-          # Tambahkan server ke known_hosts untuk menghindari prompt
           ssh-keyscan -H ${{ vars.HOST }} >> ~/.ssh/known_hosts
-          
-      - name: Deploy to Server
+
+      - name: Deploy via SSH
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ vars.USERNAME }}@${{ vars.HOST }} << 'EOF'
+          ssh -i ~/.ssh/id_rsa ${{ vars.USERNAME }}@${{ vars.HOST }} << 'EOF'
             set -e
             
             echo "🚀 Starting deployment process..."
-            
-            # Cek apakah direktori APP_PATH sudah ada
-            if [ ! -d "${{ vars.APP_PATH }}" ]; then
-              echo "📁 Directory tidak ditemukan, membuat direktori dan clone repository..."
-              mkdir -p ${{ vars.APP_PATH }}
-              cd ${{ vars.APP_PATH }}
-              git clone git@github.com:${{ github.repository }}.git .
-              
-              # Pastikan checkout ke branch development setelah clone
-              git checkout development
-            else
-              echo "📁 Directory sudah ada, melakukan git pull..."
-              cd ${{ vars.APP_PATH }}
-              
-              # Pastikan kita di branch yang benar
-              git fetch origin
-              git checkout development
-              git pull origin development
-            fi
-            
-            echo "🐳 Stopping existing containers..."
-            docker compose down || true
-            
-            echo "🔨 Building and starting containers..."
-            docker compose up -d --build
-            
+            cd ${{ vars.APP_PATH }}
+
+            echo "🔐 Logging in to GitHub Container Registry..."
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin || { echo "GHCR login failed"; exit 1; }
+
+            echo "📥 Pulling new Docker image..."
+            docker pull ghcr.io/${{ github.repository_owner }}/sahabat-ibu-hamil-backend:latest || { echo "Docker pull failed"; exit 1; }
+
+            echo "🏷️ Tagging image for local use..."
+            docker tag ghcr.io/${{ github.repository_owner }}/sahabat-ibu-hamil-backend:latest sahabat-ibu-hamil-backend:latest
+
+            echo "🛑 Stopping existing containers..."
+            docker compose down || echo "No containers running, skipping shutdown."
+
+            echo "🗑️ Cleaning up old images..."
+            docker image prune -f || echo "No images to clean up."
+
+            echo "🚀 Starting new containers..."
+            docker compose up -d || { echo "Docker compose up failed"; exit 1; }
+
             echo "🎉 Deployment completed successfully!"
             
-            # Tampilkan status containers
+            # Show container status
             echo "📊 Container status:"
             docker compose ps
           EOF
-          
+
       - name: Cleanup SSH
         if: always()
         run: |
-          # Hapus private key untuk keamanan
           rm -f ~/.ssh/id_rsa
-          
+
       - name: Deployment Status
         run: |
           echo "✅ Backend deployment to ${{ vars.HOST }} completed!"
           echo "📍 Deployed from: ${{ github.ref_name }} branch"
           echo "📝 Commit: ${{ github.sha }}"
+          echo "🐳 Image: ghcr.io/${{ github.repository_owner }}/sahabat-ibu-hamil-backend:latest"
