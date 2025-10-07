@@ -3,6 +3,7 @@ import type { ConsultationService, DeviceService } from '@/services';
 import type { ChatEngine } from '@/services/app/chat-engine';
 import type { WhatsAppService } from '@/services/app/whatsapp';
 import type { HealthCheckService } from '@/services/app/health-check.service';
+import type { OverviewService } from '@/services/overview.service';
 
 /**
  * Global app instance manager
@@ -15,6 +16,7 @@ class AppInstanceManager {
   private consultationService: ConsultationService | null = null;
   private chatEngine: ChatEngine | null = null;
   private healthCheckService: HealthCheckService | null = null;
+  private overviewService: OverviewService | null = null;
 
   private constructor() {}
 
@@ -134,6 +136,27 @@ class AppInstanceManager {
    */
   isConsultationServiceInitialized(): boolean {
     return this.consultationService !== null;
+  }
+
+  /**
+   * Set Overview service instance
+   */
+  setOverviewService(service: OverviewService): void {
+    this.overviewService = service;
+  }
+
+  /**
+   * Get Overview service instance
+   */
+  getOverviewService(): OverviewService | null {
+    return this.overviewService;
+  }
+
+  /**
+   * Check if Overview service is initialized
+   */
+  isOverviewServiceInitialized(): boolean {
+    return this.overviewService !== null;
   }
 }
 

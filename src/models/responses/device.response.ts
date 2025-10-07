@@ -39,7 +39,7 @@ export interface DeviceResponse extends BaseResponse<DeviceResponseData> {
  * Paginated devices list data structure
  * Extends the generic PaginatedResponse for devices
  */
-export interface DevicesListData extends PaginatedResponse<DeviceResponseData> {}
+export interface DevicesListData extends PaginatedResponse<DeviceResponseData> { }
 
 /**
  * Devices List Response - for get all devices operation

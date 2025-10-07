@@ -11,3 +11,5 @@
 export * from './auth.service';
 export * from './consultation.service';
 export * from './device.service';
+export * from './chat.service';
+export * from './message.service';

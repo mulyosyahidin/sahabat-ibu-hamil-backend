@@ -11,5 +11,7 @@
 export * from './auth.route';
 export * from './consultation.route';
 export * from './device.route';
+export * from './chat.route';
 export * from './welcome.route';
+export * from './overview.route';
 export * from './router';

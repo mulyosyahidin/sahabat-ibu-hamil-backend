@@ -82,3 +82,8 @@ export const setCustomTime = (
 
   d.setHours(h, min, 0, 0);
 }
+
+export const toYMD = (d: Date, tz = 'Asia/Jakarta') =>
+  new Date(d).toLocaleDateString('en-CA', { timeZone: tz });
+
+export type DayCount = { date: string; count: number };

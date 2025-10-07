@@ -12,4 +12,5 @@
 export { AuthController } from './auth.controller';
 export { ConsultationController } from './consultation.controller';
 export { DeviceController } from './device.controller';
+export { ChatController } from './chat.controller';
 export { WelcomeController } from './welcome.controller';

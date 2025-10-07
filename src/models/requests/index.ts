@@ -12,3 +12,4 @@
 export * from './auth.request';
 export * from './consultation.request';
 export * from './device.request';
+export * from './chat.request';

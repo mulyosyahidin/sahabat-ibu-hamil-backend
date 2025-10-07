@@ -8,6 +8,8 @@
  * @version 1.0.0
  */
 
+import type { DeviceDto } from './device.dto';
+
 /**
  * Chat DTO - represents the chat entity structure
  */
@@ -17,11 +19,11 @@ export interface ChatDto {
   wa_number: string;
   name: string | null;
   age: number | null;
-  consent_at: Date | null;
-  scene_stack: any; // JSON type
-  ctx: any; // JSON type
+  current_stack: string; // Last item from scene_stack array
   last_active_at: Date | null;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
+  openai_conversation_id: string | null;
+  device?: DeviceDto;
 }

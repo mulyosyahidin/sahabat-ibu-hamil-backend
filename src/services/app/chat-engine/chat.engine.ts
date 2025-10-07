@@ -2,8 +2,10 @@ import { ConsultationStatus, MessageContentSource, MessageDirection, MessageType
 import { ReminderService } from '@/services/app';
 import { WhatsAppService } from '@/services/app/whatsapp';
 import { asJsonObject, getNumericMenuChoice, NotFoundError, runIfOpenAIEnabled } from '@/utils';
-import * as fs from 'fs';
 import { extractName, extractAge, extractMenuChoice, createConversation } from '@/services/app/openai';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as mime from 'mime-types';
 
 import type { PrismaClient } from "@/generated/prisma";
 import type { QueueService } from "@/services/app/queue.service";
@@ -548,9 +550,9 @@ export class ChatEngine {
           'Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama'
         );
 
-        const image = fs.readFileSync("./public/assets/images/1.jpg");
+        const imageUrl = `${process.env.PUBLIC_URL}/assets/images/1.jpg`;
 
-        await this.sendImageResponse(chat, chat.wa_number, 'Anemia adalah kondisi ketika tubuh kekurangan sel darah merah yang sehat atau hemoglobin untuk membawa oksigen ke seluruh tubuh.', image);
+        await this.sendImageResponse(chat, chat.wa_number, 'Anemia adalah kondisi ketika tubuh kekurangan sel darah merah yang sehat atau hemoglobin untuk membawa oksigen ke seluruh tubuh.', imageUrl);
         await this.sendTextResponse(chat, chat.wa_number, responseText);
         break;
       case 2:
@@ -1275,7 +1277,7 @@ export class ChatEngine {
   /**
    * Send image response message via WhatsApp
    */
-  private async sendImageResponse(chat: Chat, sendTo: string, caption: string, media: Buffer | string): Promise<void> {
+  private async sendImageResponse(chat: Chat, sendTo: string, caption: string, media: string): Promise<void> {
     try {
       // Add country code if not present
       const formattedNumber = sendTo.startsWith('62')
@@ -1292,6 +1294,32 @@ export class ChatEngine {
         throw new NotFoundError(`Device with id ${chat.device_id} not found`);
       }
 
+      // Get file information from file system
+      let fileType = '';
+      let fileName = '';
+      let fileSize = 0;
+
+      try {
+        // Extract file path from URL (assuming it's a local file URL)
+        const urlPath = media.replace(process.env.PUBLIC_URL || '', '');
+        const filePath = path.join(process.cwd(), 'public', urlPath);
+        
+        // Get file stats
+        const stats = fs.statSync(filePath);
+        fileSize = stats.size;
+        
+        // Get filename from path
+        fileName = path.basename(filePath);
+        
+        // Get MIME type
+        fileType = mime.lookup(filePath) || '';
+      } catch (fileError) {
+        console.warn('Could not get file information:', fileError);
+        // Use fallback values if file system access fails
+        fileName = path.basename(media);
+        fileType = mime.lookup(fileName) || '';
+      }
+
       await this.whatsappService.sendImageMessage(device.code, formattedNumber, caption, media);
 
       await this.prisma.message.create({
@@ -1301,6 +1329,12 @@ export class ChatEngine {
           direction: MessageDirection.OUT,
           type: MessageType.IMAGE,
           body: caption,
+          media: {
+            url: media,
+            type: fileType,
+            filename: fileName,
+            filesize: fileSize,
+          }
         },
       });
 

@@ -11,6 +11,8 @@ import welcomeRoutes from './welcome.route';
 import authRoutes from './auth.route';
 import consultationRoutes from './consultation.route';
 import deviceRoutes from './device.route';
+import chatRoutes from './chat.route';
+import overviewRoutes from './overview.route';
 
 // Create main router instance
 const router = Router();
@@ -26,5 +28,12 @@ router.use('/consultations', consultationRoutes);
 
 // Mount device routes at /devices path
 router.use('/devices', deviceRoutes);
+
+// Mount chat routes at /chats path
+router.use('/chats', chatRoutes);
+
+// Mount overview routes at /overview path
+router.use('/overview', overviewRoutes);
+
 
 export default router;

@@ -24,7 +24,7 @@ export interface ConsultationResponseData {
   answered_at: string | null;
   created_at: string;
   updated_at: string;
-  chat: {
+  chat?: {
     name: string | null;
     age: number | null;
     wa_number: string;
@@ -60,7 +60,7 @@ export interface ConsultationsListResponse {
 /**
  * Utility function to convert ConsultationDto to ConsultationResponseData
  */
-export function toConsultationResponseData(consultation: ConsultationDto): ConsultationResponseData {
+export function toConsultationResponseData(consultation: ConsultationDto, includeChat: boolean = true): ConsultationResponseData {
   return {
     id: consultation.id,
     chat_id: consultation.chat_id,
@@ -71,10 +71,12 @@ export function toConsultationResponseData(consultation: ConsultationDto): Consu
     answered_at: consultation.answered_at ? consultation.answered_at.toISOString() : null,
     created_at: consultation.created_at.toISOString(),
     updated_at: consultation.updated_at.toISOString(),
-    chat: {
-      name: consultation.chat.name,
-      age: consultation.chat.age,
-      wa_number: consultation.chat.wa_number,
-    },
+    ...(includeChat && consultation.chat && {
+      chat: {
+        name: consultation.chat.name,
+        age: consultation.chat.age,
+        wa_number: consultation.chat.wa_number,
+      },
+    }),
   };
 }

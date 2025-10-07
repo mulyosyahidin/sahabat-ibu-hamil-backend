@@ -170,6 +170,13 @@ export class WhatsAppService {
               timestamp: new Date().toISOString()
             });
           }
+
+          if (shouldReconnect) {
+            // Reconnect after delay
+            setTimeout(() => {
+              this.startSession(deviceCode);
+            }, 5000);
+          }
         }
         else if (connection === 'open') {
           console.log(`✅ WhatsApp connected successfully for device: ${deviceCode}`);
@@ -424,9 +431,9 @@ export class WhatsAppService {
    * @param deviceCode - Kode device yang akan mengirim pesan
    * @param phoneNumber - Nomor telepon tujuan (format: 62xxx)
    * @param caption - Caption untuk gambar
-   * @param media - Buffer atau string path gambar
+   * @param media - URL string gambar
    */
-  async sendImageMessage(deviceCode: string, phoneNumber: string, caption: string, media: Buffer | string): Promise<void> {
+  async sendImageMessage(deviceCode: string, phoneNumber: string, caption: string, media: string): Promise<void> {
     try {
       console.log(`📤 Sending image message from device ${deviceCode} to ${phoneNumber}`);
 
@@ -439,19 +446,9 @@ export class WhatsAppService {
       // Format phone number for WhatsApp (add @s.whatsapp.net)
       const formattedNumber = `${phoneNumber}@s.whatsapp.net`;
 
-      // Prepare media for WAMediaUpload format
-      let imageMedia;
-      if (Buffer.isBuffer(media)) {
-        // If media is Buffer, use it directly
-        imageMedia = media;
-      } else {
-        // If media is string (URL or path), wrap it in WAMediaPayloadURL format
-        imageMedia = { url: media };
-      }
-
-      // Send image message
+      // Send image message with URL
       await session.sendMessage(formattedNumber, {
-        image: imageMedia,
+        image: { url: media },
         caption: caption
       });
 

@@ -45,7 +45,7 @@ export type ValidationResult<T> = ValidationSuccess<T> | ValidationError;
  */
 function formatValidationErrors(zodError: z.ZodError): Record<string, string[]> {
   const formatted: Record<string, string[]> = {};
-  
+
   zodError.issues.forEach((issue) => {
     const field = issue.path.join('.');
     if (!formatted[field]) {
@@ -53,7 +53,7 @@ function formatValidationErrors(zodError: z.ZodError): Record<string, string[]> 
     }
     formatted[field].push(issue.message);
   });
-  
+
   return formatted;
 }
 
@@ -69,14 +69,14 @@ export function validateData<T>(
   data: unknown
 ): ValidationResult<T> {
   const result = schema.safeParse(data);
-  
+
   if (result.success) {
     return {
       success: true,
       data: result.data
     };
   }
-  
+
   return {
     success: false,
     error: {
@@ -101,18 +101,18 @@ export function validateAndRespond<T>(
   res: Response
 ): T | null {
   const validationResult = validateData(schema, data);
-  
+
   if (validationResult.success) {
     return validationResult.data;
   }
-  
+
   // Send 422 Unprocessable Entity response
   res.status(422).json({
     success: false,
     message: validationResult.error.message,
     errors: validationResult.error.details
   });
-  
+
   return null;
 }
 

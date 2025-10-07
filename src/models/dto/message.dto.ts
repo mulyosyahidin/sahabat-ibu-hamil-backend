@@ -20,6 +20,11 @@ export interface MessageDto {
   direction: MessageDirection;
   type: MessageType;
   body: string | null;
+  media?: {
+    url: string;
+    type?: string;
+    filename?: string;
+  } | null;
   meta: any | null; // JSON type
   created_at: Date;
 }

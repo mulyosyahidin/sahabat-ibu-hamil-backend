@@ -21,6 +21,7 @@ import { ChatEngine } from './services/app/chat-engine/chat.engine';
 import { QueueService } from './services/app/queue.service';
 import { HealthCheckService } from './services/app/health-check.service';
 import { ConsultationService } from './services';
+import { OverviewService } from './services/overview.service';
 
 const __dirname = (() => {
   try {
@@ -130,6 +131,7 @@ export const createApp = (port: number = 3000): {
   const chatEngine = new ChatEngine(prisma, whatsappService, queueService);
   const healthCheckService = new HealthCheckService(prisma);
   const consultationService = new ConsultationService(prisma);
+  const overviewService = new OverviewService(prisma);
   
   // Set ChatEngine in WhatsAppService to avoid circular dependency
   whatsappService.setChatEngine(chatEngine);
@@ -140,6 +142,7 @@ export const createApp = (port: number = 3000): {
   appInstanceManager.setChatEngine(chatEngine);
   appInstanceManager.setHealthCheckService(healthCheckService);
   appInstanceManager.setConsultationService(consultationService);
+  appInstanceManager.setOverviewService(overviewService);
   
   // Set up middleware and routes
   initializeMiddlewares(app);
