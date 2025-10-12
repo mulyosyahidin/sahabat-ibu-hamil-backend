@@ -13,7 +13,7 @@ import type { ParamsDictionary } from 'express-serve-static-core';
 import type { ParsedQs } from 'qs';
 import { PrismaClient } from '@/generated/prisma';
 import { DeviceService } from '@/services';
-import { ApiResponse, toDeviceResponseData, type DevicesListData } from '@/models/responses';
+import { ApiResponse, toDeviceData, toDeviceResponseData, type DevicesListData } from '@/models/responses';
 import { validateAndRespond } from '@/utils';
 import type { CreateDeviceRequest, UpdateDeviceRequest } from '@/models/requests';
 import { createDeviceValidationSchema, updateDeviceValidationSchema } from '@/validations';
@@ -53,7 +53,7 @@ export class DeviceController {
       // Transform to response format
       const responseData = toDeviceResponseData(device);
       
-      res.status(201).json(ApiResponse.success('Device berhasil dibuat', responseData));
+      res.status(201).json(ApiResponse.success('Berhasil menambahkan data device', responseData));
     } catch (error) {
       if (error instanceof AppError) {
         res.status(error.statusCode).json(ApiResponse.error(error.message));
@@ -80,11 +80,11 @@ export class DeviceController {
       
       // Transform the result to match DevicesListData structure
       const devicesListData: DevicesListData = {
-        data: paginatedResult.data.map(device => toDeviceResponseData(device)),
+        items: paginatedResult.items.map(toDeviceData),
         pagination: paginatedResult.pagination
       };
-      
-      res.json(ApiResponse.success('Devices berhasil diambil', devicesListData));
+
+      res.json(ApiResponse.success('Berhasil mendapatkan data device', devicesListData));
     } catch (error) {
       console.error('Get all devices error:', error);
       
@@ -116,7 +116,7 @@ export class DeviceController {
       // find device by ID
       const device = await this.deviceService.getDeviceById(deviceId);
       
-      res.json(ApiResponse.success('Device berhasil diambil', device));
+      res.json(ApiResponse.success('Berhasil mendapatkan data device', device));
     } catch (error) {
       if (error instanceof AppError) {
         res.status(error.statusCode).json(ApiResponse.error(error.message));
@@ -154,7 +154,7 @@ export class DeviceController {
       
       const device = await this.deviceService.updateDevice(deviceId, validatedData);
       
-      res.json(ApiResponse.success('Device berhasil diupdate', toDeviceResponseData(device)));
+      res.json(ApiResponse.success('Berhasil memperbarui data device', toDeviceResponseData(device)));
     } catch (error) {
       console.error('Update device error:', error);
       
@@ -185,7 +185,7 @@ export class DeviceController {
       
       await this.deviceService.deleteDevice(deviceId);
       
-      res.json(ApiResponse.success('Device berhasil dihapus'));
+      res.json(ApiResponse.success('Berhasil menghapus device'));
     } catch (error) {
       console.error('Delete device error:', error);
       

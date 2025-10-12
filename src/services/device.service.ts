@@ -20,7 +20,7 @@ export class DeviceService {
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
   }
-  
+
   /**
    * Create a new device
    */
@@ -37,10 +37,10 @@ export class DeviceService {
       const existingDevice = await this.prisma.device.findUnique({
         where: { code: deviceCode }
       });
-      
+
       isCodeUnique = !existingDevice;
       attempts++;
-      
+
       if (attempts >= maxAttempts && !isCodeUnique) {
         throw new BadRequestError('Gagal membuat kode device yang unik. Silakan coba lagi.');
       }
@@ -112,7 +112,7 @@ export class DeviceService {
   /**
    * Get device by ID
    */
-  async getDeviceById(id: number): Promise<DeviceDto | null> {
+  async getDeviceById(id: number): Promise<{ device: DeviceDto } | null> {
     const device = await this.prisma.device.findUnique({
       where: {
         id: id,
@@ -125,15 +125,17 @@ export class DeviceService {
     }
 
     return {
-      id: device.id,
-      name: device.name,
-      code: device.code,
-      status: device.status,
-      phone_number: device.phone_number,
-      device_id: device.device_id,
-      created_at: device.created_at,
-      updated_at: device.updated_at,
-      deleted_at: device.deleted_at,
+      device: {
+        id: device.id,
+        name: device.name,
+        code: device.code,
+        status: device.status,
+        phone_number: device.phone_number,
+        device_id: device.device_id,
+        created_at: device.created_at,
+        updated_at: device.updated_at,
+        deleted_at: device.deleted_at,
+      }
     };
   }
 
@@ -218,15 +220,6 @@ export class DeviceService {
       throw new NotFoundError('Device tidak ditemukan');
     }
 
-    await this.prisma.device.update({
-      where: {
-        id
-      },
-      data: {
-        deleted_at: new Date(),
-      }
-    });
-
     const whatsappService = appInstanceManager.getWhatsAppService();
     if (!whatsappService) {
       throw new InternalServerError('WhatsApp service tidak tersedia');
@@ -234,13 +227,20 @@ export class DeviceService {
 
     try {
       // Use WhatsApp service to disconnect the device
-      if (device.status == DeviceStatus.CONNECTED) {
-        await whatsappService.disconnectDevice(device.code);
-      }
-      console.log(`Device ${device.code} successfully disconnected via WhatsApp service`);
-    } catch (error) {
-      console.error(`Failed to disconnect device ${device.code}:`, error);
-      throw new InternalServerError('Gagal melakukan disconnect device');
+      await whatsappService.disconnectDevice(device.code);
+      console.log(`✅ Device ${device.code} successfully disconnected via WhatsApp service`);
+    } catch (error: any) {
+      console.error(`Failed to disconnect device ${device.code}:`, error.message);
+    }
+    finally {
+      await this.prisma.device.update({
+        where: {
+          id
+        },
+        data: {
+          deleted_at: new Date(),
+        }
+      });
     }
   }
 
@@ -254,6 +254,13 @@ export class DeviceService {
       throw new NotFoundError('Device tidak ditemukan');
     }
 
+    if (device.status === DeviceStatus.DISCONNECTED) {
+      await this.prisma.device.update({
+        where: { code: device.code },
+        data: { status: DeviceStatus.RECONNECTING }
+      });
+    }
+
     const whatsappService = appInstanceManager.getWhatsAppService();
     await whatsappService.requestDeviceConnection(device.code);
   }
@@ -265,10 +272,12 @@ export class DeviceService {
    */
   async disconnectDevice(deviceId: number): Promise<void> {
     // First, verify the device exists
-    const device = await this.getDeviceById(deviceId);
-    if (!device) {
+    const getDeviceData = await this.getDeviceById(deviceId);
+    if (!getDeviceData) {
       throw new NotFoundError('Device tidak ditemukan');
     }
+
+    const device = getDeviceData.device;
 
     // Check if device status is connected
     if (device.status !== DeviceStatus.CONNECTED) {
@@ -284,7 +293,7 @@ export class DeviceService {
     try {
       // Use WhatsApp service to disconnect the device
       await whatsappService.disconnectDevice(device.code);
-      console.log(`Device ${device.code} successfully disconnected via WhatsApp service`);
+      console.log(`✅ Device ${device.code} successfully disconnected via WhatsApp service`);
     } catch (error) {
       console.error(`Failed to disconnect device ${device.code}:`, error);
       throw new InternalServerError('Gagal melakukan disconnect device');

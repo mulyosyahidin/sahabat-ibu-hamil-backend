@@ -75,7 +75,7 @@ export class AuthService {
   /**
    * Get current user profile by token
    */
-  async me(userId: number): Promise<Omit<User, 'password' | 'remember_token'>> {
+  async me(userId: number): Promise<{ user: Omit<User, 'password' | 'remember_token'> }> {
     // Find user by ID from token
       const user = await this.prisma.user.findUnique({
         where: { id: userId }
@@ -88,7 +88,7 @@ export class AuthService {
       // Return user without password and remember_token
       const { password: _password, remember_token: _rememberToken, ...userWithoutSensitiveData } = user;
       
-      return userWithoutSensitiveData;
+      return {user: userWithoutSensitiveData};
   }
 
   /**

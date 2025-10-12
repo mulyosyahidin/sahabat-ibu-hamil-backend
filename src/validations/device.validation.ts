@@ -20,7 +20,7 @@ export const createDeviceValidationSchema = z.object({
     .string({ message: "Nama device tidak boleh kosong" })
     .trim()
     .min(1, { message: "Nama device tidak boleh kosong" })
-    .min(3, { message: "Nama device minimal 3 karakter" })
+    .min(4, { message: "Nama device minimal 4 karakter" })
     .max(100, { message: "Nama device maksimal 100 karakter" })
 
 });

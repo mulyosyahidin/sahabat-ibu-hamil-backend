@@ -35,22 +35,26 @@ export interface ChatDeviceResponseData {
  * Includes message count statistics
  */
 export interface ChatResponseData {
-  id: number;
-  device_id: number;
-  wa_number: string;
-  name: string | null;
-  age: number | null;
-  current_stack: string;
-  last_active_at: string | null;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
-  openai_conversation_id: string | null;
+  chat: {
+    id: number;
+    device_id: number;
+    wa_number: string;
+    name: string | null;
+    age: number | null;
+    current_stack: string;
+    last_active_at: string | null;
+    created_at: string;
+    updated_at: string;
+    deleted_at: string | null;
+    openai_conversation_id: string | null;
+  },
   device?: ChatDeviceResponseData | undefined;
-  message_count: number;
-  message_in_count: number;
-  message_out_count: number;
-  consultation_count: number;
+  stats: {
+    message_count: number;
+    message_in_count: number;
+    message_out_count: number;
+    consultation_count: number;
+  },
   consultations?: ConsultationResponseData[] | undefined;
 }
 
@@ -67,7 +71,7 @@ export interface ChatResponse extends BaseResponse<ChatResponseData> {
  * Paginated chats list data structure
  * Extends the generic PaginatedResponse for chats
  */
-export interface ChatsListData extends PaginatedResponse<ChatResponseData> {}
+export interface ChatsListData extends PaginatedResponse<ChatResponseData> { }
 
 /**
  * Chats List Response - for get all chats operation
@@ -84,17 +88,19 @@ export interface ChatsListResponse extends BaseResponse<ChatsListData> {
  */
 export function toChatResponseData(chat: ChatDto & { message_count: number; message_in_count: number; message_out_count: number; consultation_count: number; consultations?: any[] }): ChatResponseData {
   return {
-    id: chat.id,
-    device_id: chat.device_id,
-    wa_number: chat.wa_number,
-    name: chat.name,
-    age: chat.age,
-    current_stack: chat.current_stack,
-    last_active_at: chat.last_active_at ? chat.last_active_at.toISOString() : null,
-    created_at: chat.created_at.toISOString(),
-    updated_at: chat.updated_at.toISOString(),
-    deleted_at: chat.deleted_at ? chat.deleted_at.toISOString() : null,
-    openai_conversation_id: chat.openai_conversation_id,
+    chat: {
+      id: chat.id,
+      device_id: chat.device_id,
+      wa_number: chat.wa_number,
+      name: chat.name,
+      age: chat.age,
+      current_stack: chat.current_stack,
+      last_active_at: chat.last_active_at ? chat.last_active_at.toISOString() : null,
+      created_at: chat.created_at.toISOString(),
+      updated_at: chat.updated_at.toISOString(),
+      deleted_at: chat.deleted_at ? chat.deleted_at.toISOString() : null,
+      openai_conversation_id: chat.openai_conversation_id,
+    },
     device: chat.device ? {
       id: chat.device.id,
       name: chat.device.name,
@@ -106,11 +112,13 @@ export function toChatResponseData(chat: ChatDto & { message_count: number; mess
       updated_at: chat.device.updated_at.toISOString(),
       deleted_at: chat.device.deleted_at ? chat.device.deleted_at.toISOString() : null,
     } : undefined,
-    message_count: chat.message_count,
-    message_in_count: chat.message_in_count,
-    message_out_count: chat.message_out_count,
-    consultation_count: chat.consultation_count,
-    consultations: chat.consultations?.map(consultation => 
+    stats: {
+      message_count: chat.message_count,
+      message_in_count: chat.message_in_count,
+      message_out_count: chat.message_out_count,
+      consultation_count: chat.consultation_count,
+    },
+    consultations: chat.consultations?.map(consultation =>
       toConsultationResponseData(consultation, false)
     ) || undefined,
   };

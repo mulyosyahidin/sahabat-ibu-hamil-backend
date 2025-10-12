@@ -42,7 +42,7 @@ export class ChatController {
       
       // Transform the result to match ChatsListData structure
       const chatsListData: ChatsListData = {
-        data: paginatedResult.data.map(chat => toChatResponseData(chat)),
+        items: paginatedResult.items.map(chat => toChatResponseData(chat)),
         pagination: paginatedResult.pagination
       };
       

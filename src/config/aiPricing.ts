@@ -12,19 +12,19 @@ export const PRICING = {
  */
 export const aiPricing = {
   // OpenAI GPT Models
-  "gpt-4o-mini": {
+  "GPT-4O-MINI": {
     input: 0.15,
     output: 0.60
   },
-  "gpt-4o": {
+  "GPT-4O": {
     input: 2.50,
     output: 10.00
   },
-  "gpt-4-turbo": {
+  "GPT-4-TURBO": {
     input: 10.00,
     output: 30.00
   },
-  "gpt-3.5-turbo": {
+  "GPT-3-5-TURBO": {
     input: 0.50,
     output: 1.50
   },

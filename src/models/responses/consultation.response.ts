@@ -15,15 +15,17 @@ import type { PaginationMeta } from './paginated.response';
  * Consultation response data structure
  */
 export interface ConsultationResponseData {
-  id: number;
-  chat_id: number;
-  message: string | null;
-  answer: string | null;
-  status: string;
-  viewed_at: string | null;
-  answered_at: string | null;
-  created_at: string;
-  updated_at: string;
+  consultation: {
+    id: number;
+    chat_id: number;
+    message: string | null;
+    answer: string | null;
+    status: string;
+    viewed_at: string | null;
+    answered_at: string | null;
+    created_at: string;
+    updated_at: string;
+  },
   chat?: {
     name: string | null;
     age: number | null;
@@ -44,7 +46,7 @@ export interface ConsultationResponse {
  * Consultations list data structure
  */
 export interface ConsultationsListData {
-  data: ConsultationResponseData[];
+  items: ConsultationResponseData[];
   pagination: PaginationMeta;
 }
 
@@ -62,15 +64,17 @@ export interface ConsultationsListResponse {
  */
 export function toConsultationResponseData(consultation: ConsultationDto, includeChat: boolean = true): ConsultationResponseData {
   return {
-    id: consultation.id,
-    chat_id: consultation.chat_id,
-    message: consultation.message,
-    answer: consultation.answer,
-    status: consultation.status,
-    viewed_at: consultation.viewed_at ? consultation.viewed_at.toISOString() : null,
-    answered_at: consultation.answered_at ? consultation.answered_at.toISOString() : null,
-    created_at: consultation.created_at.toISOString(),
-    updated_at: consultation.updated_at.toISOString(),
+    consultation: {
+      id: consultation.id,
+      chat_id: consultation.chat_id,
+      message: consultation.message,
+      answer: consultation.answer,
+      status: consultation.status,
+      viewed_at: consultation.viewed_at ? consultation.viewed_at.toISOString() : null,
+      answered_at: consultation.answered_at ? consultation.answered_at.toISOString() : null,
+      created_at: consultation.created_at.toISOString(),
+      updated_at: consultation.updated_at.toISOString(),
+    },
     ...(includeChat && consultation.chat && {
       chat: {
         name: consultation.chat.name,

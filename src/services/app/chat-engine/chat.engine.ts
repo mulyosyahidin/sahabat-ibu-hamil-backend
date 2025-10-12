@@ -1,7 +1,7 @@
 import { ConsultationStatus, MessageContentSource, MessageDirection, MessageType, type Chat } from '@/generated/prisma';
 import { ReminderService } from '@/services/app';
 import { WhatsAppService } from '@/services/app/whatsapp';
-import { asJsonObject, getNumericMenuChoice, NotFoundError, runIfOpenAIEnabled } from '@/utils';
+import { asJsonObject, extractYouTubeVideoId, getNumericMenuChoice, NotFoundError, runIfOpenAIEnabled } from '@/utils';
 import { extractName, extractAge, extractMenuChoice, createConversation } from '@/services/app/openai';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -600,7 +600,7 @@ export class ChatEngine {
           'Ketik 9️⃣ untuk kembali ke menu sebelumnya, 0️⃣ untuk kembali ke menu utama'
         );
 
-        const video = 'https://www.youtube.com/watch?v=koLlDJ8ZryE';
+        const video = 'https://www.youtube.com/watch?v=xZGtriJDFN4';
 
         await this.sendVideoResponse(chat, chat.wa_number, 'Dampak anemia yang perlu diwaspadai', video);
         await this.sendTextResponse(chat, chat.wa_number, responseText);
@@ -1303,14 +1303,14 @@ export class ChatEngine {
         // Extract file path from URL (assuming it's a local file URL)
         const urlPath = media.replace(process.env.PUBLIC_URL || '', '');
         const filePath = path.join(process.cwd(), 'public', urlPath);
-        
+
         // Get file stats
         const stats = fs.statSync(filePath);
         fileSize = stats.size;
-        
+
         // Get filename from path
         fileName = path.basename(filePath);
-        
+
         // Get MIME type
         fileType = mime.lookup(filePath) || '';
       } catch (fileError) {
@@ -1365,7 +1365,12 @@ export class ChatEngine {
         throw new NotFoundError(`Device with id ${chat.device_id} not found`);
       }
 
-      await this.whatsappService.sendVideoMessage(device.code, formattedNumber, caption, media);
+      const videoId = extractYouTubeVideoId(media);
+      if (!videoId) {
+        throw new Error('Invalid YouTube URL provided');
+      }
+
+      await this.whatsappService.sendVideoMessage(device.code, formattedNumber, caption, videoId);
 
       await this.prisma.message.create({
         data: {
@@ -1374,6 +1379,10 @@ export class ChatEngine {
           direction: MessageDirection.OUT,
           type: MessageType.VIDEO,
           body: caption,
+          media: {
+            url: media,
+            videoId: videoId,
+          }
         },
       });
 

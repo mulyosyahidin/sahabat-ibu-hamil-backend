@@ -14,7 +14,7 @@ export interface PaginationMeta {
   /** Number of items per page */
   limit: number;
   /** Total number of items across all pages */
-  total: number;
+  totalItems: number;
   /** Total number of pages */
   totalPages: number;
   /** Whether there is a next page */
@@ -30,7 +30,7 @@ export interface PaginationMeta {
  */
 export interface PaginatedResponse<T> {
   /** Array of items for the current page */
-  data: T[];
+  items: T[];
   /** Pagination metadata */
   pagination: PaginationMeta;
 }
@@ -50,19 +50,19 @@ export class PaginatedResponseHelper {
    * @returns Paginated response with metadata
    */
   static create<T>(
-    data: T[],
+    items: T[],
     page: number,
     limit: number,
-    total: number
+    totalItems: number
   ): PaginatedResponse<T> {
-    const totalPages = Math.ceil(total / limit);
+    const totalPages = Math.ceil(totalItems / limit);
     
     return {
-      data,
+      items,
       pagination: {
         page,
         limit,
-        total,
+        totalItems,
         totalPages,
         hasNext: page < totalPages,
         hasPrev: page > 1

@@ -93,6 +93,8 @@ export class MessageService {
 
     // Build where clause for cursor-based pagination
     const whereClause: any = { chat_id: chatId };
+
+    const allMessagesCount = await this.prisma.message.count({ where: whereClause });
     
     if (cursor) {
       // For infinite scroll going up (loading older messages)
@@ -133,6 +135,7 @@ export class MessageService {
 
     return {
       messages: messageDtos.map(toMessageResponseData),
+      messageCount: allMessagesCount,
       nextCursor,
       hasMore,
     };

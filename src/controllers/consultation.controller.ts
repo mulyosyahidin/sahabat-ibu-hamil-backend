@@ -47,7 +47,7 @@ export class ConsultationController {
       
       // Transform the result to match ConsultationsListData structure
       const consultationsListData: ConsultationsListData = {
-        data: paginatedResult.data.map(consultation => toConsultationResponseData(consultation)),
+        items: paginatedResult.items.map(consultation => toConsultationResponseData(consultation)),
         pagination: paginatedResult.pagination
       };
       

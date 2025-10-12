@@ -12,18 +12,22 @@ import type { DeviceDto } from '@/models/dto';
 import type { BaseResponse } from './base.response';
 import type { PaginatedResponse } from './paginated.response';
 
+export interface DeviceData {
+id: number;
+    name: string;
+    code: string;
+    status: string;
+    phone_number: string | null;
+    created_at: Date;
+    updated_at: Date;
+}
+
 /**
  * Device data structure for API responses
  * Excludes sensitive or internal fields from the DTO
  */
 export interface DeviceResponseData {
-  id: number;
-  name: string;
-  code: string;
-  status: string;
-  phone_number: string | null;
-  created_at: Date;
-  updated_at: Date;
+  device: DeviceData;
 }
 
 /**
@@ -39,7 +43,7 @@ export interface DeviceResponse extends BaseResponse<DeviceResponseData> {
  * Paginated devices list data structure
  * Extends the generic PaginatedResponse for devices
  */
-export interface DevicesListData extends PaginatedResponse<DeviceResponseData> { }
+export interface DevicesListData extends PaginatedResponse<DeviceData> { }
 
 /**
  * Devices List Response - for get all devices operation
@@ -64,12 +68,26 @@ export interface DeviceDeleteResponse extends BaseResponse {
  */
 export function toDeviceResponseData(device: DeviceDto): DeviceResponseData {
   return {
+    device: {
+      id: device.id,
+      name: device.name,
+      code: device.code,
+      status: device.status,
+      phone_number: device.phone_number,
+      created_at: device.created_at,
+      updated_at: device.updated_at,
+    }
+  };
+}
+
+export function toDeviceData(device: DeviceDto): DeviceData {
+  return {
     id: device.id,
-    name: device.name,
-    code: device.code,
-    status: device.status,
-    phone_number: device.phone_number,
-    created_at: device.created_at,
-    updated_at: device.updated_at,
+      name: device.name,
+      code: device.code,
+      status: device.status,
+      phone_number: device.phone_number,
+      created_at: device.created_at,
+      updated_at: device.updated_at,
   };
 }

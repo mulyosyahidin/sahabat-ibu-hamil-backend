@@ -52,6 +52,7 @@ export interface MessageCursorResponse extends BaseResponse<{
   message: string;
   data: {
     messages: MessageResponseData[];
+    messageCount: number;
     nextCursor: number | null;
     hasMore: boolean;
   };
@@ -75,6 +76,7 @@ export interface MessagesListData {
  */
 export interface MessagesCursorData {
   messages: MessageResponseData[];
+  messageCount: number;
   nextCursor: number | null;
   hasMore: boolean;
 }

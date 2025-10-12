@@ -26,14 +26,18 @@ export class OverviewService {
      * Get device count
      */
     getDeviceCount = async () => {
-        return await this.prisma.device.count();
+        return this.prisma.device.count({
+            where: { deleted_at: null },
+        });
     }
+
 
     /**
      * Get chat count in last 7 days
      */
     async getChatCountPerDay(): Promise<DayCount[]> {
         const TZ = 'Asia/Jakarta';
+        const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
         // tentukan rentang [start, end) = 7 hari terakhir berakhir di awal hari besok (TZ aware)
         const now = new Date();
@@ -53,7 +57,12 @@ export class OverviewService {
             d.setDate(d.getDate() + i);
             const key = toYMD(d, TZ);
             idxByDate.set(key, i);
-            days.push({ date: key, count: 0 });
+            const dayOfWeek = d.getDay();
+            days.push({
+                date: key,
+                day: dayNames[dayOfWeek] || 'Unknown',
+                count: 0
+            });
         }
 
         // ambil hanya 7 hari terakhir, lalu agregasi di JS ke level tanggal lokal

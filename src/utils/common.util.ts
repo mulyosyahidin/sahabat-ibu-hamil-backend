@@ -86,4 +86,11 @@ export const setCustomTime = (
 export const toYMD = (d: Date, tz = 'Asia/Jakarta') =>
   new Date(d).toLocaleDateString('en-CA', { timeZone: tz });
 
-export type DayCount = { date: string; count: number };
+export const extractYouTubeVideoId = (url: string) => {
+    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+    const match = url.match(regex);
+
+    return match && match[1] ? match[1] : null;
+  }
+
+export type DayCount = { date: string; count: number, day: string };
