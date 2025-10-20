@@ -65,7 +65,12 @@ export class WhatsAppService {
   async startSession(deviceCode: string, n?: number, totalSessions?: number): Promise<void> {
     const number = n ? `[${n}${totalSessions ? `/${totalSessions}: ${deviceCode}` : ''}]` : '';
 
-    if (this.startingSessions.has(deviceCode) || this.sessions.has(deviceCode)) return;
+    if (this.startingSessions.has(deviceCode) || this.sessions.has(deviceCode)) {
+      console.log(`⚠️ ${number} Sesi sudah dimuat, abaikan inisialisasi`);
+
+      return
+    };
+    
     this.startingSessions.add(deviceCode);
 
     try {
