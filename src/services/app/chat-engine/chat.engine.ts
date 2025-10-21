@@ -43,8 +43,13 @@ export class ChatEngine {
       const phoneNumber = message.key.remoteJid.replace('@s.whatsapp.net', '');
 
       // cek apakah nomor ini sudah pernah chat atau belum
-      const chat = await this.findOrCreateChat(deviceCode, phoneNumber);
+      const {chat, isNew} = await this.findOrCreateChat(deviceCode, phoneNumber);
       await this.saveMessage(chat.id, phoneNumber, MessageContentSource.USER, message);
+      
+      if (isNew) {
+        return;
+      }
+
       await this.processMessage(chat, message);
     }
     catch (error) {
@@ -116,15 +121,16 @@ export class ChatEngine {
           where: { id: chat.id },
           data: { ctx: { isNewUser: false, registrationStep: 'name' } },
         });
-      } else {
-        // Update last active time
-        await this.prisma.chat.update({
-          where: { id: chat.id },
-          data: { last_active_at: new Date() },
-        });
+
+        return {chat, isNew: true};
       }
 
-      return chat;
+      await this.prisma.chat.update({
+        where: { id: chat.id },
+        data: { last_active_at: new Date() },
+      });
+
+      return { chat, isNew: false };
     } catch (error) {
       console.error(`Error finding or creating chat:`, error);
       throw error;
@@ -1267,7 +1273,7 @@ export class ChatEngine {
         },
       });
 
-      console.log(`Response sent to ${sendTo} on device code ${device.code}`);
+      console.log(`🛫 Response sent to ${sendTo} on device code ${device.code}`);
     } catch (error) {
       console.error(`Error sending response:`, error);
       throw error;
@@ -1338,7 +1344,7 @@ export class ChatEngine {
         },
       });
 
-      console.log(`Image response sent to ${sendTo} on device code ${device.code}`);
+      console.log(`🛫 Image response sent to ${sendTo} on device code ${device.code}`);
     } catch (error) {
       console.error(`Error sending image response:`, error);
       throw error;
@@ -1386,7 +1392,7 @@ export class ChatEngine {
         },
       });
 
-      console.log(`Video response sent to ${sendTo} on device code ${device.code}`);
+      console.log(`🛫 Video response sent to ${sendTo} on device code ${device.code}`);
     } catch (error) {
       console.error(`Error sending video response:`, error);
       throw error;
