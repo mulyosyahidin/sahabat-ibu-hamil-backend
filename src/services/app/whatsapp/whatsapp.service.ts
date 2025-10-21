@@ -65,12 +65,24 @@ export class WhatsAppService {
   async startSession(deviceCode: string, n?: number, totalSessions?: number): Promise<void> {
     const number = n ? `[${n}${totalSessions ? `/${totalSessions}: ${deviceCode}` : ''}]` : '';
 
-    if (this.startingSessions.has(deviceCode) || this.sessions.has(deviceCode)) {
-      console.log(`⚠️ ${number} Sesi sudah dimuat, abaikan inisialisasi`);
+    const existing = this.sessions.get(deviceCode);
+    if (this.startingSessions.has(deviceCode)) {
+      console.log(`⚠️ ${number} Sedang inisialisasi, abaikan duplikasi`);
 
-      return
-    };
-    
+      return;
+    }
+
+    if (existing) {
+      const isActive = this.connectedNow.has(deviceCode);
+      if (isActive) {
+        console.log(`⚠️ ${number} Sesi aktif, abaikan inisialisasi`);
+        return;
+      }
+      
+      try { existing.end?.(undefined); } catch { }
+      this.sessions.delete(deviceCode);
+    }
+
     this.startingSessions.add(deviceCode);
 
     try {
@@ -332,10 +344,18 @@ export class WhatsAppService {
               },
             });
 
+            try { sock.end?.(undefined); } catch { }
+            this.sessions.delete(deviceCode);
+            this.connectedNow.delete(deviceCode);
+            this.lastQrByDevice.delete(deviceCode);
+            this.scannedPending.delete(deviceCode);
+
             console.log(`🔄 ${number} Mencoba reconnect dalam 5 detik...`);
             setTimeout(() => {
               this.startSession(deviceCode);
             }, 5000);
+
+            return;
           }
 
           this.connectedNow.delete(deviceCode);
