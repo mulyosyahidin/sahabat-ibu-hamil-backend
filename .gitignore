@@ -1,4 +1,10 @@
 node_modules
 dist
 .env
+.env.test
+.env.docker
 coverage
+.vscode
+
+/src/generated/prisma
+/sessions
